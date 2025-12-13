@@ -71,33 +71,3 @@ def build_app(service: IngestionService, expected_api_key: Optional[str] = None)
         }
 
     return app
-
-
-# def create_flask_app() -> Flask:
-
-#     app = Flask(__name__)
-
-#     # Apply config for use by blueprints/utils via current_app.config
-#     app.config.update(
-#         DEBUG=bool(settings.get("app", {}).get("debug", False)),
-#         MAX_CONTENT_LENGTH=int(settings.get("upload", {}).get("max_bytes", 25 * 1024 * 1024)),
-#         ALLOWED_MIME_TYPES=set(settings.get("csv", {}).get("allowed_mime_types", [])),
-#         UPLOAD_DIR=str(Path(settings.get("upload", {}).get("dir", "./uploads")).resolve()),
-#         CSV_API_TOKEN=settings.get("security", {}).get("csv_api_token"),
-#     )
-
-#     # Ensure upload & data dirs exist
-#     Path(app.config["UPLOAD_DIR"]).mkdir(parents=True, exist_ok=True)
-#     Path("data").mkdir(parents=True, exist_ok=True)
-
-#     # DB init
-#     db_cfg = settings.get("database", {})
-#     db_url = db_cfg.get("url", "sqlite:///data/app.db")
-#     db_echo = bool(db_cfg.get("echo", False))
-#     init_db(db_url, echo=db_echo)
-#     logger.info("DB initialized url=%s echo=%s", db_url, db_echo)
-
-#     # Routes
-#     app.register_blueprint(csv_bp)  # add url_prefix="/api" if you prefer
-
-#     return app

@@ -11,3 +11,9 @@ pandas==2.2.2
 # Optional (if you deploy behind a proxy/load balancer)
 werkzeug==3.0.3
 
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+
+
