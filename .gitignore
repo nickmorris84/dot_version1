@@ -5,6 +5,8 @@ venv/
 # Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
 # Logs & temp
 *.log
@@ -20,3 +22,6 @@ __pycache__/
 # *.db
 # *.csv
 # *.parquet
+
+# Secrets
+.env
