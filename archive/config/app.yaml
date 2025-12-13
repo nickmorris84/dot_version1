@@ -1,0 +1,23 @@
+app:
+  debug: false
+  host: 0.0.0.0
+  port: 8000
+
+upload:
+  dir: ./uploads
+  max_bytes: 26214400  # 25 MB
+
+csv:
+  allowed_mime_types:
+    - text/csv
+    - application/csv
+    - application/vnd.ms-excel
+
+security:
+  # Keep tokens out of YAML in real deployments.
+  # This key is here for local dev only; in prod use CSV_API_TOKEN env var.
+  csv_api_token: null
+
+database:
+  url: sqlite:///data/app.db
+  echo: false
