@@ -27,3 +27,4 @@ git checkout -b feature/dot-stabilisation
 git branch
 
 git add .
+git commit -m "Add README, logging fixes, CSV test script"

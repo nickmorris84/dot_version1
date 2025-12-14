@@ -10,7 +10,7 @@ pydantic-settings>=2.2
 PyYAML>=6.0
 
 # Data processing
-pandas>=2.1
+pandas>=2.0
 
 # UploadFile parsing
 python-multipart>=0.0.9
