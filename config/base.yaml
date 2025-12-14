@@ -1,0 +1,19 @@
+data_config:
+
+  standardiser:
+    to_snake_case: true
+
+  # DQ = dataset steps (df->df) + row steps (Event->Event)
+  dq:
+    dataset_steps:
+      - trim_strings
+    row_steps:
+      - normalize_status
+
+  # per-record classifiers
+  classifiers:
+    - name: risk_classifier
+      params:
+        levels: [high, critical]
+    - name: status_label
+
