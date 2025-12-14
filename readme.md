@@ -12,7 +12,7 @@ uvicorn digital_operation_twin.main:app --reload
 curl http://127.0.0.1:8000/api/healthz
 
 python scripts/send_csv_to_api.py \
-  --csv ./path/to/sample.csv \
+  --csv ./data/inputs/credit_card_process_activities.csv \
   --customer customer_a
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Any, Tuple, Optional
 
-from src.digital_operation_twin.core.models.event import Event
+from digital_operation_twin.core.models.event import Event
 
 try:
     from pydantic import ValidationError

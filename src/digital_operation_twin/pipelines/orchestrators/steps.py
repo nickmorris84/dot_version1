@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import json
+import os
 from typing import Any, Dict, List
 import pandas as pd
 
@@ -9,6 +11,18 @@ from digital_operation_twin.pipelines.transforms.schema_validation import schema
 from digital_operation_twin.core.models.pipeline_state import PipelineState
 
 logger = logging.getLogger(__name__)
+
+_LOG_DATA = os.getenv("DOT_LOG_DATA", "0").lower() in {"1","true","yes","y"}
+_MAX_CHARS = int(os.getenv("DOT_LOG_DATA_MAX_CHARS", "2000"))
+
+
+def _preview(obj: Any) -> str:
+    try:
+        s = json.dumps(obj, default=str)
+    except Exception:
+        s = str(obj)
+    return s if len(s) <= _MAX_CHARS else s[:_MAX_CHARS] + "...(truncated)"
+
 
 
 class GateStep:
@@ -64,6 +78,14 @@ class GateStep:
                 )
                 return state
 
+        if _LOG_DATA:
+            logger.debug(
+                "Gate received payload_type=%s record_count=%s",
+                str(type(payload)),
+                len(records),
+                extra={"step": self.name, "event_id": state.event_id},
+            )
+
         if not records:
             state.status = "rejected"
             state.errors.append({"code": "empty_payload", "message": "No records provided."})
@@ -102,6 +124,13 @@ class GateStep:
                     return state
 
             state.records = normalized
+            if _LOG_DATA:
+                logger.debug(
+                    "Gate normalized records=%s sample=%s",
+                    len(normalized),
+                    _preview(normalized[0] if normalized else {}),
+                    extra={"step": self.name, "event_id": state.event_id},
+                )
             logger.info(
                 "Gate schema validation ok",
                 extra={"step": self.name, "event_id": state.event_id, "validated": len(state.records)},

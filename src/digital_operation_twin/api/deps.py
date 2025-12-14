@@ -73,7 +73,7 @@ def get_settings_pubsub(request: Request, customer_id: str = Depends(get_pubsub_
 # Orchestrator creation (cached per customer)
 # -----------------------------
 def get_customer_id_from_settings(settings: Settings) -> str:
-    return settings.customers.id
+    return settings.customer_id
 
 
 @lru_cache(maxsize=128)

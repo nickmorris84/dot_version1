@@ -1,7 +1,7 @@
 import pandas as pd
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Union
-from src.digital_operation_twin.core.models.event import Event
+from digital_operation_twin.core.models.event import Event
 from digital_operation_twin.pipelines.transforms.validator import ValidatorPipeline
 
 import logging
