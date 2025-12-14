@@ -16,6 +16,7 @@ from .steps import (
     NormalizerStep,
     StandardiserStep,
     DataQualityStep,
+    FinalSchemaValidationStep,
     PersistStep,
 )
 
@@ -40,8 +41,8 @@ class MasterOrchestrator:
 
         self.gate_runner = PipelineRunner(
             steps=[
-                GateStep(enable_validation=False),
-                IdempotencyStep(IdempotencyStore)],
+                GateStep(enable_validation=True, validation_mode="report"),
+                IdempotencyStep(IdempotencyStore())],
             
             name="gate",
         )
@@ -52,6 +53,7 @@ class MasterOrchestrator:
                 NormalizerStep(self.normaliser_cfg),
                 StandardiserStep(self.standardiser_cfg),
                 DataQualityStep(self.dq_cfg),
+                FinalSchemaValidationStep(),
                 PersistStep(self.repo),
             ],
             name="event cleaning",

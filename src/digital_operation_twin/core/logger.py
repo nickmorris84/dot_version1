@@ -45,7 +45,7 @@ def _parse_level(level: str | None) -> int:
 def configure_logger(log_dir: Optional[str] = None, level: int | None = None) -> logging.Logger:
     """Configure root logger (idempotent)."""
     resolved_level = level if level is not None else _parse_level(os.getenv("LOG_LEVEL"))
-    resolved_dir = Path(log_dir or os.getenv("DOT_LOG_DIR", "./logs"))
+    resolved_dir = Path(log_dir or os.getenv("DOT_LOG_DIR", "./data/logs"))
     log_file = os.getenv("DOT_LOG_FILE", "dot.log")
 
     resolved_dir.mkdir(parents=True, exist_ok=True)
@@ -60,7 +60,7 @@ def configure_logger(log_dir: Optional[str] = None, level: int | None = None) ->
 
     fmt = logging.Formatter(
         "%(asctime)s %(levelname)s %(name)s "
-        "[cid=%(correlation_id)s cust=%(customer_id)s event=%(event_id)s] "
+        # "[cid=%(correlation_id)s cust=%(customer_id)s event=%(event_id)s] "
         "%(message)s"
     )
 

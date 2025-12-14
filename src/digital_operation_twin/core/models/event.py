@@ -28,19 +28,46 @@ class Event:
 
     @classmethod
     def from_dict(cls, row: Dict[str, Any]) -> "Event":
-        # map known fields; bucket everything else into .extra
+        # Known fields (everything except extra)
         known = {f for f in cls.__dataclass_fields__.keys() if f != "extra"}  # type: ignore[attr-defined]
-        core = {k: row.get(k) for k in known if k in row}
+
+        # Bucket unknown keys into extra
         extra = {k: v for k, v in row.items() if k not in known}
 
-        # light datetime coercion
         def to_dt(x):
+            if x is None or x == "":
+                return None
             try:
-                return pd.to_datetime(x, errors="coerce").to_pydatetime() if x is not None else None
+                dt = pd.to_datetime(x, errors="coerce")
+                return None if pd.isna(dt) else dt.to_pydatetime()
             except Exception:
                 return None
 
-        return cls(**core, extra=extra)
+        def norm_codes(x):
+            # allow list OR scalar OR empty
+            if x is None or x == "":
+                return None
+            if isinstance(x, list):
+                return x
+            # common CSV case: "A,B,C"
+            if isinstance(x, str) and "," in x:
+                return [p.strip() for p in x.split(",") if p.strip()]
+            return [x]  # wrap scalar into list for consistency
 
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        # Build core dict with explicit coercions
+        core = {k: row.get(k) for k in known}
+
+        # Coerce datetimes
+        core["start_ts"] = to_dt(core.get("start_ts"))
+        core["end_ts"] = to_dt(core.get("end_ts"))
+
+        # Normalize codes
+        core["event_codes"] = norm_codes(core.get("event_codes"))
+
+        # Validate required fields early (clear errors)
+        required = ["event_id", "journey_id", "step", "start_ts", "end_ts", "event_type", "event_description"]
+        missing = [k for k in required if core.get(k) in (None, "")]
+        if missing:
+            raise TypeError(f"Missing required fields: {missing}")
+
+        return cls(**core, extra=extra)

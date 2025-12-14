@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import json
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from digital_operation_twin.core.models.api_gate import APIModel
@@ -32,8 +32,10 @@ class GateStep:
     """
     name = "gate"
 
-    def __init__(self, *, enable_validation: bool = True) -> None:
+    def __init__(self, *, enable_validation: bool = True, validation_mode: str = "report") -> None:
+        # validation_mode: "report" (log-only) or "enforce" (reject early)
         self.enable_validation = enable_validation
+        self.validation_mode = validation_mode
 
     async def run(self, state: PipelineState) -> PipelineState:
         msg: APIModel = state.context["msg"]
@@ -78,6 +80,12 @@ class GateStep:
                 )
                 return state
 
+        # Now it is safe to log len(records)
+        logger.info(
+            "Gate normalized payload",
+            extra={"step": self.name, "event_id": state.event_id, "received": len(records)},
+        )
+
         if _LOG_DATA:
             logger.debug(
                 "Gate received payload_type=%s record_count=%s",
@@ -95,22 +103,45 @@ class GateStep:
             )
             return state
 
-        logger.info(
-            "Gate normalized payload",
-            extra={"step": self.name, "event_id": state.event_id, "received": len(records)},
-        )
-
-        # Optional schema/DQ validation per record (fast-ish)
+        # Optional schema/DQ validation per record
         if self.enable_validation:
-            normalized: List[Dict[str, Any]] = []
+            state.metrics.setdefault("schema_report", [])
+            normalized_records: List[Dict[str, Any]] = []
+
             for idx, rec in enumerate(records):
                 try:
-                    _, out = schema_validation(rec, state.schema_version)
-                    normalized.append(out)
+                    # report mode logs diffs, enforce mode validates/normalizes and can reject
+                    _, out, diff = schema_validation(rec, state.schema_version, mode=self.validation_mode)
+
+                    missing = diff.get("missing_required", [])
+                    extras = diff.get("extra_fields", [])
+
+                    for idx, rec in enumerate(records):
+                        _, _, diff = schema_validation(rec, state.schema_version, mode="report")
+
+                        missing = diff.get("missing_required") or []
+                        extras = diff.get("extra_fields") or []
+
+                        if missing or extras:
+                            logger.info(
+                                f"Gate schema report idx={idx} missing_required={missing} extra_fields={extras}",
+                                extra={"step": self.name, "event_id": state.event_id, "schema_version": state.schema_version, "index": idx},
+                            )
+                        else:
+                            logger.debug(
+                                f"Gate schema report idx={idx} ok",
+                                extra={"step": self.name, "event_id": state.event_id, "schema_version": state.schema_version, "index": idx},
+                            )
+
+
+                    state.metrics["schema_report"].append({"index": idx, **diff})
+
+                    # Keep original record if report-only; use normalized if enforce
+                    normalized_records.append(out if self.validation_mode == "enforce" else rec)
+
                 except DQError as e:
                     state.status = "rejected"
                     state.errors.append({"index": idx, "code": e.code, "message": str(e), "details": e.details})
-
                     logger.warning(
                         "Gate rejected: schema/DQ validation failed",
                         extra={
@@ -119,21 +150,23 @@ class GateStep:
                             "schema_version": state.schema_version,
                             "index": idx,
                             "dq_code": getattr(e, "code", "dq_error"),
+                            "details": getattr(e, "details", {}),
                         },
                     )
                     return state
 
-            state.records = normalized
-            if _LOG_DATA:
+            state.records = normalized_records
+
+            if _LOG_DATA and state.records:
                 logger.debug(
-                    "Gate normalized records=%s sample=%s",
-                    len(normalized),
-                    _preview(normalized[0] if normalized else {}),
+                    "Gate records sample=%s",
+                    _preview(state.records[0]),
                     extra={"step": self.name, "event_id": state.event_id},
                 )
+
             logger.info(
-                "Gate schema validation ok",
-                extra={"step": self.name, "event_id": state.event_id, "validated": len(state.records)},
+                "Gate schema check complete",
+                extra={"step": self.name, "event_id": state.event_id, "records": len(state.records)},
             )
         else:
             state.records = records
@@ -152,10 +185,78 @@ class GateStep:
         return state
 
 
+class FinalSchemaValidationStep:
+    """
+    Enforce Event schema right before persistence.
+    If anything still doesn't satisfy Event required fields -> reject & short-circuit.
+    """
+    name = "final_schema_validation"
+
+    def __init__(self, *, schema_version: Optional[str] = None) -> None:
+        self.schema_version = schema_version  # allow override; else uses state.schema_version
+
+    async def run(self, state: PipelineState) -> PipelineState:
+        if state.df is None:
+            state.status = "rejected"
+            state.errors.append({"code": "no_df", "message": "No DataFrame provided to final schema validation."})
+            logger.warning("Final schema validation rejected: no df", extra={"step": self.name, "event_id": state.event_id})
+            return state
+
+        if not isinstance(state.df, pd.DataFrame):
+            state.status = "rejected"
+            state.errors.append({"code": "invalid_df", "message": f"Expected DataFrame, got {type(state.df).__name__}"})
+            logger.warning(
+                "Final schema validation rejected: invalid df type",
+                extra={"step": self.name, "event_id": state.event_id, "df_type": type(state.df).__name__},
+            )
+            return state
+
+        sv = self.schema_version or state.schema_version
+        records = state.df.to_dict(orient="records")
+
+        for idx, rec in enumerate(records):
+            try:
+                _, normalized, diff = schema_validation(rec, sv, mode="enforce")
+            except DQError as e:
+                state.status = "rejected"
+                state.errors.append({"index": idx, "code": e.code, "message": str(e), "details": e.details})
+                logger.warning(
+                    "Final schema validation failed",
+                    extra={
+                        "step": self.name,
+                        "event_id": state.event_id,
+                        "index": idx,
+                        "dq_code": e.code,
+                        "missing_required": (e.details or {}).get("missing_required", []),
+                        "extra_fields": (e.details or {}).get("extra_fields", []),
+                    },
+                )
+                return state
+
+            # Optional: you *can* replace df row with normalized fields here if you want canonical output.
+            # For now, we just enforce.
+            if diff.get("extra_fields"):
+                logger.info(
+                    "Final schema validation: extras present (allowed)",
+                    extra={"step": self.name, "event_id": state.event_id, "index": idx, "extra_fields": diff["extra_fields"]},
+                )
+
+        logger.info(
+            "Final schema validation ok",
+            extra={"step": self.name, "event_id": state.event_id, "rows": len(records)},
+        )
+        return state
+
+
 class IdempotencyStep:
     name = "idempotency"
 
     def __init__(self, store) -> None:
+        # Allow passing either an instance or the class (common mistake)
+        if store is None:
+            raise ValueError("IdempotencyStep requires a store instance")
+        if isinstance(store, type):
+            store = store()  # instantiate if a class was passed by accident
         self.store = store
 
     async def run(self, state: PipelineState) -> PipelineState:
@@ -175,7 +276,10 @@ class IdempotencyStep:
             return state
 
         try:
-            if self.store.seen(dedupe_key):
+            # Use keyword arg to reduce signature mismatch risk
+            is_dup = self.store.seen(key=dedupe_key) if "key" in getattr(self.store.seen, "__code__", ()).co_varnames else self.store.seen(dedupe_key)
+
+            if is_dup:
                 state.status = "duplicate"
                 logger.info(
                     "Duplicate detected",
@@ -183,16 +287,17 @@ class IdempotencyStep:
                 )
                 return state
 
-            # mark only AFTER acceptance
-            self.store.mark(dedupe_key)
+            # Some stores auto-mark inside seen(); only call mark if it exists
+            if hasattr(self.store, "mark"):
+                self.store.mark(dedupe_key)
+
             logger.info(
-                "Idempotency marked",
+                "Idempotency passed",
                 extra={"step": self.name, "event_id": state.event_id, "dedupe_key": dedupe_key},
             )
             return state
 
         except Exception:
-            # Idempotency should be best-effort: log, but allow processing to continue.
             logger.exception(
                 "Idempotency store error; continuing without dedupe",
                 extra={"step": self.name, "event_id": state.event_id, "dedupe_key": dedupe_key},
@@ -275,20 +380,49 @@ class DataQualityStep:
 
     def __init__(self, dq_cfg: Dict[str, Any]):
         from digital_operation_twin.pipelines.transforms.quality import DataQualityService
-
         self.service = DataQualityService(dq_cfg)
 
     async def run(self, state: PipelineState) -> PipelineState:
-        assert state.df is not None
+        if state.df is None:
+            state.status = "rejected"
+            state.errors.append({"code": "no_df", "message": "No DataFrame provided to DataQuality."})
+            logger.warning("DataQuality rejected: no df", extra={"step": self.name, "event_id": state.event_id})
+            return state
+
+        if not isinstance(state.df, pd.DataFrame):
+            raise TypeError(f"DataQualityStep expected DataFrame, got {type(state.df).__name__}")
+
         logger.info(
             "DataQuality start",
             extra={"step": self.name, "event_id": state.event_id, "rows": int(len(state.df))},
         )
-        state.df = self.service.run(state.df)
+
+        try:
+            state.df = self.service.run(state.df)
+        except Exception as e:
+            # Decide your behavior: reject gracefully (below) instead of blowing up the whole pipeline
+            state.status = "rejected"
+            state.errors.append({"code": "data_quality_failed", "message": str(e)})
+            logger.warning(
+                "DataQuality rejected",
+                extra={"step": self.name, "event_id": state.event_id, "reason": str(e)},
+            )
+            return state
+
+        logger.info(
+            "After DataQuality",
+            extra={"step": self.name, "event_id": state.event_id, "df_type": type(state.df).__name__},
+        )
+
         logger.info(
             "DataQuality done",
             extra={"step": self.name, "event_id": state.event_id, "rows": int(len(state.df))},
         )
+
+        # enforce contract for downstream steps
+        if not isinstance(state.df, pd.DataFrame):
+            raise TypeError(f"DataQualityStep must return DataFrame, got {type(state.df).__name__}")
+
         return state
 
 

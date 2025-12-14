@@ -14,9 +14,9 @@ data_config:
         product_type: product
         stage_start_time: start_ts
         stage_end_time: end_ts
-        event_description: activity_notes
-        event_type: activity_type
-        event_codes: risk_grade
+        activity_type: event_type
+        activity_notes: event_description
+        risk_grade: event_codes
 
 
   # DQ = dataset steps (df->df) + row steps (Event->Event)

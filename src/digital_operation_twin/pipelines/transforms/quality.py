@@ -1,72 +1,77 @@
 import pandas as pd
+from typing import Any, Dict, List
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Union
 from digital_operation_twin.core.models.event import Event
 from digital_operation_twin.pipelines.transforms.validator import ValidatorPipeline
 
 import logging
 logger = logging.getLogger(__name__)
 
-class DataQualityService():
-    
+
+class DataQualityService:
     def __init__(self, validator_cfg: Dict[str, Any]):
         self.validator_cfg = validator_cfg
-        self.validator_pipeline = None
 
-
-    def validate_event_schema(self, row: Dict[str, Any]) -> "Event":
+    def _validate_event_schema(self, row: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Attempts to create an Event object from raw data. 
-        Will raise TypeError if required fields are missing.
+        Attempts to create an Event object from raw data.
+        Raises ValueError if required fields are missing.
+        Returns a normalized dict (Event.to_dict()).
         """
         try:
             event = Event.from_dict(row)
-            logger.debug("Schema validated successfully")
-            return event
+            logger.debug("Schema validated successfully", extra={"event_id": getattr(event, "event_id", None)})
+            return event.to_dict()
         except TypeError as e:
-            logger.warning(f"Schema validation failed: {e}")
-            raise ValueError(f"Schema validation failed: {str(e)}")
+            # Event.__init__ missing required args ends up here
+            logger.warning("Schema validation failed: %s", e)
+            raise ValueError(f"Schema validation failed: {e}") from e
 
-
-    def validate_event_data(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+    def _validate_event_data(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         """
         Runs additional DQ checks (nulls, ranges, regex) on the dataframe.
+        Returns a list of issues (empty list means OK).
         """
-        self.validator_pipeline = ValidatorPipeline(self.validator_cfg, df)
-        issues = self.validator_pipeline.run()
+        validator_pipeline = ValidatorPipeline(self.validator_cfg, df)
+        issues = validator_pipeline.run()
         if issues:
-            logger.warning(f"ValidatorPipeline found {len(issues)} issues")
+            logger.warning("ValidatorPipeline found %s issues", len(issues))
         else:
             logger.debug("ValidatorPipeline found no issues")
         return issues
-    
-    
-    def run(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Full pipeline:
-        - Optional mapping/normalization
-        - Schema validation (Event dataclass)
-        - Extra DQ validation
-        - Return structured response
-        """
-        # Step 1: Schema check (required fields)
-        try:
-            event_obj = self.validate_event_schema(row)
-        except ValueError as e:
-            return {"status": "rejected", "error": str(e)}
 
-        # Step 2: Build a single-row dataframe for DQ checks
-        df = pd.DataFrame([event_obj.to_dict()])
+    def run(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Full DQ pipeline (DataFrame in / DataFrame out):
+        - Schema validation per row (Event model)
+        - Extra DQ validation on the resulting validated_df
+        - Returns validated_df if OK
+        - Raises ValueError if rejected
+        """
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"DataQualityService expected DataFrame, got {type(df).__name__}")
 
-        # Step 3: Run DQ validators
-        issues = self.validate_event_data(df)
+        if df.empty:
+            logger.info("DQ: empty DataFrame; nothing to validate")
+            return df
+
+        validated_rows: List[Dict[str, Any]] = []
+
+        # 1) Schema validation row-by-row; rebuild normalized dataframe
+        for idx, row in df.iterrows():
+            try:
+                validated_rows.append(self._validate_event_schema(row.to_dict()))
+            except ValueError as e:
+                logger.warning("DQ rejected at row=%s: %s", idx, e)
+                raise
+
+        validated_df = pd.DataFrame(validated_rows)
+
+        # 2) Extra DQ rules
+        issues = self._validate_event_data(validated_df)
         if issues:
-            return {
-                "status": "rejected",
-                "event_id": getattr(event_obj, "event_id", None),
-                "issues": issues
-            }
+            # keep details in exception (or you can attach to state in the step)
+            raise ValueError(f"DQ rejected: {len(issues)} issues found")
 
-        # Step 4: If OK, persist or hand off
-        logger.info(f"Event {event_obj.event_id} passed all checks")
-        return {"status": "accepted", "event": event_obj.to_dict()}
+        logger.info("DQ passed for %s rows", len(validated_df))
+        return validated_df

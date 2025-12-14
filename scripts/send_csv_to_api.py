@@ -15,6 +15,15 @@ from pathlib import Path
 
 import httpx
 
+import os
+import logging
+
+logging.basicConfig(
+    level=os.getenv("DOT_LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    force=True,  # IMPORTANT: overrides any prior logging config
+)
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="POST a CSV to /api/ingest_csv")
