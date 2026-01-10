@@ -33,11 +33,13 @@ class MasterOrchestrator:
     def __init__(self, cfg: Dict[str, Any], repo: Any | None = None):
         self.cfg = cfg
         self.repo = repo or Repository()
+        
+        #Update the config to be dynamic. 
 
         data_cfg = cfg.get("data_config", {})
         self.normaliser_cfg = data_cfg.get("normaliser", {})
         self.standardiser_cfg = data_cfg.get("standardiser", {})
-        self.dq_cfg = data_cfg.get("data_quality", {})
+        self.data_quality_cfg = data_cfg.get("data_quality", {})
 
         self.gate_runner = PipelineRunner(
             steps=[
@@ -52,12 +54,15 @@ class MasterOrchestrator:
                 ToDataFrameStep(),
                 NormalizerStep(self.normaliser_cfg),
                 StandardiserStep(self.standardiser_cfg),
-                DataQualityStep(self.dq_cfg),
+                DataQualityStep(self.data_quality_cfg),
                 FinalSchemaValidationStep(),
                 PersistStep(self.repo),
             ],
-            name="event cleaning",
+            name="event cleaning", 
+            # NM: call this step the transforms step, it should pull based on the config.
         )
+        
+        # Add a final step for close gate and push into queue for processing
 
     async def gate(self, msg: APIModel) -> PipelineState:
         state = PipelineState(event_id=msg.envelope.event_id, context={"msg": msg}, cfg=self.cfg)

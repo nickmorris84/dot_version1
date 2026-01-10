@@ -61,6 +61,7 @@ def deep_merge(base: dict, override: dict) -> dict:
     return merged
 
 
+
 @dataclass(frozen=True)
 class ConfigStore:
     """Holds raw config layers and can produce validated Settings per customer."""

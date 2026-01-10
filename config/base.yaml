@@ -4,7 +4,7 @@ data_config:
     to_snake_case: true
 
   # DQ = dataset steps (df->df) + row steps (Event->Event)
-  dq:
+  data_quality:
     dataset_steps:
       - trim_strings
     row_steps:

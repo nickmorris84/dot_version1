@@ -41,7 +41,7 @@ class StandardiserConfig(BaseModel):
     rename: Dict[str, str] = Field(default_factory=dict)
 
 
-class DQConfig(BaseModel):
+class DataQualityConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     dataset_steps: List[str] = Field(default_factory=list)
     row_steps: List[str] = Field(default_factory=list)
@@ -57,7 +57,7 @@ class DataConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source: Optional[str] = None
     standardiser: StandardiserConfig = StandardiserConfig()
-    dq: DQConfig = DQConfig()
+    data_quality: DataQualityConfig = DataQualityConfig()
     classifiers: List[ClassifierConfig] = Field(default_factory=list)
     # Allow additional config blocks that your pipeline expects today without breaking.
     # You can gradually type these later.

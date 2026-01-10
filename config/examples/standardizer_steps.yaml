@@ -1,0 +1,137 @@
+
+# -------------------------
+# String trimming
+# -------------------------
+trim_strings: true
+# or
+# trim_strings:
+#   columns: "*"
+# or
+# trim_strings:
+#   columns: ["name", "email"]
+
+
+# -------------------------
+# Case normalization
+# -------------------------
+normalize_case:
+  columns: ["first_name", "last_name"]
+  case: lower        # lower | upper | title
+
+
+# -------------------------
+# Remove special characters
+# -------------------------
+remove_special_chars:
+  columns: ["name", "email"]
+  # choose ONE of the following:
+
+  # Option 1: explicit regex
+  # pattern: "[^a-zA-Z0-9@._ ]"
+
+  # Option 2: allowed characters (everything else removed)
+  allowed_chars: "\w\s@._"
+
+
+# -------------------------
+# Replace null-like values
+# -------------------------
+replace_nulls:
+  columns: "*"
+  null_values: ["", "n/a", "na", "null"]
+
+
+# -------------------------
+# Boolean standardization
+# -------------------------
+standardize_booleans: true
+# or
+# standardize_booleans:
+#   columns: ["is_active", "has_opted_in"]
+#   true_vals: ["yes", "y", "true", "1"]
+#   false_vals: ["no", "n", "false", "0"]
+
+
+# -------------------------
+# Currency cleaning
+# -------------------------
+clean_currency:
+  columns: ["amount", "balance"]
+  # optional override
+  # strip_pattern: "[£$,]"
+
+
+# -------------------------
+# Date normalization
+# -------------------------
+normalize_dates:
+  columns: ["application_date", "dob"]
+  format: "%Y-%m-%d"     # optional
+
+
+# -------------------------
+# Column rename
+# -------------------------
+rename:
+  mapping:
+    FirstName: first_name
+    LastName: last_name
+    DOB: date_of_birth
+
+
+# -------------------------
+# Convert column names to snake_case
+# -------------------------
+to_snake_case: true
+
+
+# -------------------------
+# Cast column data types
+# -------------------------
+cast:
+  dtypes:
+    age: int
+    amount: float
+    application_date: datetime64[ns]
+
+# or cast everything to string
+# cast:
+#   dtypes: "*"
+
+
+# -------------------------
+# Map values in columns
+# -------------------------
+value_map:
+  columns: ["status"]
+  mapping:
+    A: active
+    I: inactive
+    S: suspended
+
+
+# -------------------------
+# Require columns to exist and contain no NULLs
+# -------------------------
+require:
+  columns: ["customer_id", "application_id"]
+
+
+# -------------------------
+# Drop columns
+# -------------------------
+drop_columns:
+  columns: ["raw_notes", "temp_flag"]
+
+
+# -------------------------
+# Fill default values
+# -------------------------
+fill_defaults:
+  defaults:
+    country: "UK"
+    currency: "GBP"
+
+# or fill all missing values with empty string
+# fill_defaults:
+#   defaults: "*"

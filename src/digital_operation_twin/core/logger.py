@@ -87,3 +87,32 @@ def configure_logger(log_dir: Optional[str] = None, level: int | None = None) ->
 
     setattr(root, "_dot_configured", True)
     return logging.getLogger("digital_operation_twin")
+
+
+class StepLogCapture(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        msg = self.format(record)
+        self.records.append(msg)
+
+def capture_logs_for_step(logger_names: list[str], level: int = logging.DEBUG) -> tuple[StepLogCapture, list[logging.Logger]]:
+    handler = StepLogCapture()
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"))
+
+    attached = []
+    for name in logger_names:
+        lg = logging.getLogger(name)
+        lg.setLevel(level)
+        lg.addHandler(handler)
+        attached.append(lg)
+
+    return handler, attached
+
+def detach(handler: logging.Handler, loggers: list[logging.Logger]) -> None:
+    for lg in loggers:
+        lg.removeHandler(handler)
+

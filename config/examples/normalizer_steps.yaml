@@ -1,0 +1,97 @@
+# -------------------------
+# 1) Trim strings
+# -------------------------
+trim_strings: true
+# or:
+# trim_strings:
+#   columns: "*"
+# or:
+# trim_strings:
+#   columns: ["name", "email", "status"]
+
+
+# -------------------------
+# 2) Normalize case
+# -------------------------
+normalize_case:
+  columns: ["name", "email"]
+  case: lower         # lower | upper | title
+# case is optional (defaults to lower)
+
+
+# -------------------------
+# 3) Remove special chars
+# -------------------------
+remove_special_chars:
+  columns: ["name", "comments"]
+  # choose ONE of these:
+  # pattern: "[^a-zA-Z0-9 ]"
+  allowed_chars: "\w\s"
+# Notes:
+# - If you provide allowed_chars, we build the pattern: [^{allowed_chars}]
+
+
+# -------------------------
+# 4) Replace null-like values with NA
+# -------------------------
+replace_nulls:
+  columns: "*"
+  null_values: ["", "n/a", "na", "null", "none"]
+
+
+# -------------------------
+# 5) Standardize booleans
+# -------------------------
+standardize_booleans: true
+# or with overrides:
+# standardize_booleans:
+#   columns: ["is_active", "has_opted_in"]
+#   true_vals: ["yes", "y", "true", "1", "t"]
+#   false_vals: ["no", "n", "false", "0", "f"]
+
+
+# -------------------------
+# 6) Clean currency / numeric money fields
+# -------------------------
+clean_currency:
+  columns: ["amount", "balance"]
+  # optional override:
+  # strip_pattern: "[£$,]"
+
+
+# -------------------------
+# 7) Normalize dates
+# -------------------------
+normalize_dates:
+  columns: ["application_date", "dob"]
+  format: "%Y-%m-%d"    # optional; if omitted, pandas infers
+
+
+
+trim_strings:
+  columns: ["customer_name", "email", "status", "comments"]
+
+normalize_case:
+  columns: ["email", "status"]
+  case: lower
+
+remove_special_chars:
+  columns: ["customer_name"]
+  allowed_chars: "\w\s'-"   # keep letters/numbers/space/'/-
+
+replace_nulls:
+  columns: ["status", "comments"]
+  null_values: ["", "-", "n/a", "na", "null", "none", "unknown"]
+
+standardize_booleans:
+  columns: ["is_active"]
+  true_vals: ["yes", "y", "true", "1", "active"]
+  false_vals: ["no", "n", "false", "0", "inactive"]
+
+clean_currency:
+  columns: ["amount"]
+  strip_pattern: "[£$,]"
+
+normalize_dates:
+  columns: ["application_date"]
+  format: "%d/%m/%Y"

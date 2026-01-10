@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Protocol
+import pandas as pd
 import time
-from typing import Protocol, List, Any
 
 from digital_operation_twin.core.models.pipeline_state import PipelineState
 
@@ -27,7 +29,25 @@ def _preview(obj: Any) -> str:
 class Step(Protocol):
     name: str
 
-    async def run(self, state: PipelineState) -> PipelineState: ...
+    async def run(self, state: PipelineState) -> PipelineState:
+        raise NotImplementedError
+    
+    
+@dataclass
+class StepReport:
+    step_name: str
+    ok: bool
+    duration_ms: int
+    rows_before: int
+    rows_after: int
+    cols_before: List[str]
+    cols_after: List[str]
+    added_cols: List[str]
+    removed_cols: List[str]
+    nulls_top: Dict[str, int]
+    output_path: Optional[str] = None
+    error: Optional[str] = None
+    log_path: Optional[str] = None
 
 
 class PipelineRunner:
