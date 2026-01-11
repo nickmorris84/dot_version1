@@ -6,7 +6,7 @@ import pandas as pd
 import logging
 import re
 
-from digital_operation_twin.core.models.transformation_request import TransformationRequest, FieldMapper, TransformationConfigError, TransformationResult
+from digital_operation_twin.core.models.transformation_processIO import TransformationRequest, TranformationProcessFn, ProcessConfigError, ProcessResult
 from digital_operation_twin.core.utils import step_cfg, ensure_columns_param, resolve_columns, require_dict, require_keys, coerce_list_of_str
 
 logger = logging.getLogger(__name__)
@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# NORMALIZER steps (now all: FieldMapper(req)->TransformationResult)
+# NORMALIZER steps (now all: TranformationProcessFn(req)->ProcessResult)
 # ============================================================
 
-def trim_strings() -> FieldMapper:
+def trim_strings() -> TranformationProcessFn:
     """
     Config:
       trim_strings: true
@@ -30,7 +30,7 @@ def trim_strings() -> FieldMapper:
     """
     step = "trim_strings"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         enabled = step_cfg(req, step)
@@ -39,7 +39,7 @@ def trim_strings() -> FieldMapper:
         elif isinstance(enabled, dict):
             columns_param = ensure_columns_param(enabled.get("columns", "*"), step=step)
         else:
-            raise TransformationConfigError(
+            raise ProcessConfigError(
                 f"[{step}] Must be 'true' or a dict (e.g., {{columns: '*'}}). Got: {repr(enabled)}"
             )
 
@@ -53,13 +53,13 @@ def trim_strings() -> FieldMapper:
                 updated_cols.append(col)
 
         logger.debug(f"[{step}] DONE | columns_param={columns_param!r} | updated_cols={updated_cols} | shape={out.shape}")
-        return TransformationResult(df=out, issues=[], meta={"columns_param": columns_param, "updated_cols": updated_cols})
+        return ProcessResult(df=out, issues=[], meta={"columns_param": columns_param, "updated_cols": updated_cols})
 
     _fn.__name__ = step
     return _fn
 
 
-def normalize_case() -> FieldMapper:
+def normalize_case() -> TranformationProcessFn:
     """
     Config:
       normalize_case:
@@ -68,7 +68,7 @@ def normalize_case() -> FieldMapper:
     """
     step = "normalize_case"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -77,7 +77,7 @@ def normalize_case() -> FieldMapper:
         columns_param = ensure_columns_param(cfg.get("columns"), step=step)
         case = cfg.get("case", "lower")
         if case not in {"lower", "upper", "title"}:
-            raise TransformationConfigError(
+            raise ProcessConfigError(
                 f"[{step}] 'case' must be one of lower|upper|title, got: {repr(case)}"
             )
 
@@ -99,7 +99,7 @@ def normalize_case() -> FieldMapper:
         logger.debug(
             f"[{step}] DONE | case={case!r} | columns_param={columns_param!r} | updated_cols={updated_cols} | shape={out.shape}"
         )
-        return TransformationResult(
+        return ProcessResult(
             df=out,
             issues=[],
             meta={"columns_param": columns_param, "case": case, "updated_cols": updated_cols},
@@ -109,7 +109,7 @@ def normalize_case() -> FieldMapper:
     return _fn
 
 
-def remove_special_chars() -> FieldMapper:
+def remove_special_chars() -> TranformationProcessFn:
     """
     Config:
       remove_special_chars:
@@ -120,7 +120,7 @@ def remove_special_chars() -> FieldMapper:
     """
     step = "remove_special_chars"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -132,13 +132,13 @@ def remove_special_chars() -> FieldMapper:
         allowed_chars = cfg.get("allowed_chars")
 
         if pattern is None and allowed_chars is None:
-            raise TransformationConfigError(f"[{step}] Provide either 'pattern' or 'allowed_chars'.")
+            raise ProcessConfigError(f"[{step}] Provide either 'pattern' or 'allowed_chars'.")
 
         if pattern is not None and not isinstance(pattern, str):
-            raise TransformationConfigError(f"[{step}] 'pattern' must be a str, got: {type(pattern).__name__}")
+            raise ProcessConfigError(f"[{step}] 'pattern' must be a str, got: {type(pattern).__name__}")
 
         if allowed_chars is not None and not isinstance(allowed_chars, str):
-            raise TransformationConfigError(f"[{step}] 'allowed_chars' must be a str, got: {type(allowed_chars).__name__}")
+            raise ProcessConfigError(f"[{step}] 'allowed_chars' must be a str, got: {type(allowed_chars).__name__}")
 
         if pattern is None:
             pattern = rf"[^{allowed_chars}]"
@@ -146,7 +146,7 @@ def remove_special_chars() -> FieldMapper:
         try:
             re.compile(pattern)
         except re.error as e:
-            raise TransformationConfigError(f"[{step}] Invalid regex pattern: {pattern}. Error: {e}")
+            raise ProcessConfigError(f"[{step}] Invalid regex pattern: {pattern}. Error: {e}")
 
         out = req.df.copy()
         cols_to_use = resolve_columns(out, columns_param)
@@ -160,7 +160,7 @@ def remove_special_chars() -> FieldMapper:
         logger.debug(
             f"[{step}] DONE | columns_param={columns_param!r} | pattern={pattern!r} | updated_cols={updated_cols} | shape={out.shape}"
         )
-        return TransformationResult(
+        return ProcessResult(
             df=out,
             issues=[],
             meta={"columns_param": columns_param, "pattern": pattern, "updated_cols": updated_cols},
@@ -170,7 +170,7 @@ def remove_special_chars() -> FieldMapper:
     return _fn
 
 
-def replace_nulls() -> FieldMapper:
+def replace_nulls() -> TranformationProcessFn:
     """
     Config:
       replace_nulls:
@@ -179,7 +179,7 @@ def replace_nulls() -> FieldMapper:
     """
     step = "replace_nulls"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -200,7 +200,7 @@ def replace_nulls() -> FieldMapper:
         logger.debug(
             f"[{step}] DONE | columns_param={columns_param!r} | null_values={null_values!r} | updated_cols={updated_cols} | shape={out.shape}"
         )
-        return TransformationResult(
+        return ProcessResult(
             df=out,
             issues=[],
             meta={"columns_param": columns_param, "null_values": null_values, "updated_cols": updated_cols},
@@ -210,7 +210,7 @@ def replace_nulls() -> FieldMapper:
     return _fn
 
 
-def standardize_booleans() -> FieldMapper:
+def standardize_booleans() -> TranformationProcessFn:
     """
     Config:
       standardize_booleans: true
@@ -222,7 +222,7 @@ def standardize_booleans() -> FieldMapper:
     """
     step = "standardize_booleans"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = step_cfg(req, step)
@@ -263,7 +263,7 @@ def standardize_booleans() -> FieldMapper:
             f"[{step}] DONE | cfg_mode={cfg_mode} | columns_param={columns_param!r} | updated_cols={updated_cols} | "
             f"true_vals={sorted(true_set)!r} | false_vals={sorted(false_set)!r} | shape={out.shape}"
         )
-        return TransformationResult(
+        return ProcessResult(
             df=out,
             issues=[],
             meta={
@@ -279,7 +279,7 @@ def standardize_booleans() -> FieldMapper:
     return _fn
 
 
-def clean_currency() -> FieldMapper:
+def clean_currency() -> TranformationProcessFn:
     """
     Config:
       clean_currency:
@@ -289,7 +289,7 @@ def clean_currency() -> FieldMapper:
     """
     step = "clean_currency"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -299,7 +299,7 @@ def clean_currency() -> FieldMapper:
 
         strip_pattern = cfg.get("strip_pattern", r"[\$,]")
         if not isinstance(strip_pattern, str):
-            raise TransformationConfigError(f"[{step}] 'strip_pattern' must be str, got: {type(strip_pattern).__name__}")
+            raise ProcessConfigError(f"[{step}] 'strip_pattern' must be str, got: {type(strip_pattern).__name__}")
 
         out = req.df.copy()
         cols_to_use = resolve_columns(out, columns_param)
@@ -319,7 +319,7 @@ def clean_currency() -> FieldMapper:
         logger.debug(
             f"[{step}] DONE | columns_param={columns_param!r} | strip_pattern={strip_pattern!r} | updated_cols={updated_cols} | shape={out.shape}"
         )
-        return TransformationResult(
+        return ProcessResult(
             df=out,
             issues=[],
             meta={"columns_param": columns_param, "strip_pattern": strip_pattern, "updated_cols": updated_cols},
@@ -329,7 +329,7 @@ def clean_currency() -> FieldMapper:
     return _fn
 
 
-def normalize_dates() -> FieldMapper:
+def normalize_dates() -> TranformationProcessFn:
     """
     Config:
       normalize_dates:
@@ -339,7 +339,7 @@ def normalize_dates() -> FieldMapper:
     """
     step = "normalize_dates"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -349,7 +349,7 @@ def normalize_dates() -> FieldMapper:
 
         fmt = cfg.get("format", None)
         if fmt is not None and not isinstance(fmt, str):
-            raise TransformationConfigError(f"[{step}] 'format' must be str or null, got: {type(fmt).__name__}")
+            raise ProcessConfigError(f"[{step}] 'format' must be str or null, got: {type(fmt).__name__}")
 
         out = req.df.copy()
         cols_to_use = resolve_columns(out, columns_param)
@@ -363,7 +363,7 @@ def normalize_dates() -> FieldMapper:
         logger.debug(
             f"[{step}] DONE | columns_param={columns_param!r} | format={fmt!r} | updated_cols={updated_cols} | shape={out.shape}"
         )
-        return TransformationResult(
+        return ProcessResult(
             df=out,
             issues=[],
             meta={"columns_param": columns_param, "format": fmt, "updated_cols": updated_cols},

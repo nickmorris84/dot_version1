@@ -2,16 +2,16 @@ import logging
 from typing import Callable, Dict, List, Any, Optional
 import pandas as pd
 
-from digital_operation_twin.core.models.transformation_request import TransformationRequest, FieldMapper, TransformationConfigError, TransformationResult, Issue
+from digital_operation_twin.core.models.transformation_processIO import TransformationRequest, TranformationProcessFn, ProcessConfigError, ProcessResult, Issue
 from digital_operation_twin.core.utils import step_cfg, ensure_columns_param, resolve_columns, require_dict, require_keys
 
 logger = logging.getLogger(__name__)
 
 # -------------------------
-# Validators (now FieldMapper -> TransformationResult)
+# Validators (now TranformationProcessFn -> ProcessResult)
 # -------------------------
 
-def check_required_columns() -> FieldMapper:
+def check_required_columns() -> TranformationProcessFn:
     """
     Config:
       check_required_columns:
@@ -19,7 +19,7 @@ def check_required_columns() -> FieldMapper:
     """
     step = "check_required_columns"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -41,7 +41,7 @@ def check_required_columns() -> FieldMapper:
                 })
 
         logger.debug(f"[{step}] DONE | checked={cols} | missing={missing} | issues={len(issues)}")
-        return TransformationResult(
+        return ProcessResult(
             df=req.df,
             issues=issues,
             meta={"checked": cols, "missing": missing},
@@ -51,7 +51,7 @@ def check_required_columns() -> FieldMapper:
     return _fn
 
 
-def check_nulls() -> FieldMapper:
+def check_nulls() -> TranformationProcessFn:
     """
     Config:
       check_nulls:
@@ -59,7 +59,7 @@ def check_nulls() -> FieldMapper:
     """
     step = "check_nulls"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -99,7 +99,7 @@ def check_nulls() -> FieldMapper:
             f"[{step}] DONE | columns_param={columns_param!r} | resolved={cols} | checked={checked} | "
             f"missing={missing} | issues={len(issues)}"
         )
-        return TransformationResult(
+        return ProcessResult(
             df=req.df,
             issues=issues,
             meta={"resolved": cols, "checked": checked, "missing": missing, "null_counts": null_counts},
@@ -109,7 +109,7 @@ def check_nulls() -> FieldMapper:
     return _fn
 
 
-def check_value_range() -> FieldMapper:
+def check_value_range() -> TranformationProcessFn:
     """
     Config:
       check_value_range:
@@ -119,7 +119,7 @@ def check_value_range() -> FieldMapper:
     """
     step = "check_value_range"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -127,15 +127,15 @@ def check_value_range() -> FieldMapper:
 
         column = cfg.get("column")
         if not isinstance(column, str) or not column.strip():
-            raise TransformationConfigError(f"[{step}] 'column' must be a non-empty string.")
+            raise ProcessConfigError(f"[{step}] 'column' must be a non-empty string.")
 
         min_val = cfg.get("min", None)
         max_val = cfg.get("max", None)
 
         if min_val is not None and not isinstance(min_val, (int, float)):
-            raise TransformationConfigError(f"[{step}] 'min' must be a number or null. Got: {type(min_val).__name__}")
+            raise ProcessConfigError(f"[{step}] 'min' must be a number or null. Got: {type(min_val).__name__}")
         if max_val is not None and not isinstance(max_val, (int, float)):
-            raise TransformationConfigError(f"[{step}] 'max' must be a number or null. Got: {type(max_val).__name__}")
+            raise ProcessConfigError(f"[{step}] 'max' must be a number or null. Got: {type(max_val).__name__}")
 
         issues: List[Issue] = []
 
@@ -146,7 +146,7 @@ def check_value_range() -> FieldMapper:
                 "message": f"Missing required column: {column}",
             })
             logger.debug(f"[{step}] DONE | column={column!r} missing | issues=1")
-            return TransformationResult(df=req.df, issues=issues, meta={"column": column, "min": min_val, "max": max_val})
+            return ProcessResult(df=req.df, issues=issues, meta={"column": column, "min": min_val, "max": max_val})
 
         # Range checks should operate on numeric values; do not mutate the df.
         s = pd.to_numeric(req.df[column], errors="coerce")
@@ -180,7 +180,7 @@ def check_value_range() -> FieldMapper:
             f"[{step}] DONE | column={column!r} | min={min_val!r} | max={max_val!r} | "
             f"below={below_count} | above={above_count} | issues={len(issues)}"
         )
-        return TransformationResult(
+        return ProcessResult(
             df=req.df,
             issues=issues,
             meta={"column": column, "min": min_val, "max": max_val, "below": below_count, "above": above_count},

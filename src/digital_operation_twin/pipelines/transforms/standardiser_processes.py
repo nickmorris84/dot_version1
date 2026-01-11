@@ -5,17 +5,17 @@ import pandas as pd
 import re
 import logging
 
-from digital_operation_twin.core.models.transformation_request import TransformationRequest, FieldMapper, TransformationConfigError, TransformationResult
+from digital_operation_twin.core.models.transformation_processIO import TransformationRequest, TranformationProcessFn, ProcessConfigError, ProcessResult
 from digital_operation_twin.core.utils import step_cfg, ensure_columns_param, resolve_columns, require_dict, require_keys, to_snake_case_label
 
 logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# STANDARDIZER steps (now all: FieldMapper(req)->TransformationResult)
+# STANDARDIZER steps (now all: TranformationProcessFn(req)->ProcessResult)
 # ============================================================
 
-def rename() -> FieldMapper:
+def rename() -> TranformationProcessFn:
     """
     Config:
       rename:
@@ -25,7 +25,7 @@ def rename() -> FieldMapper:
     """
     step = "rename"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -33,7 +33,7 @@ def rename() -> FieldMapper:
 
         mapping = cfg.get("mapping")
         if not isinstance(mapping, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in mapping.items()):
-            raise TransformationConfigError(f"[{step}] 'mapping' must be dict[str,str]. Got: {type(mapping).__name__}")
+            raise ProcessConfigError(f"[{step}] 'mapping' must be dict[str,str]. Got: {type(mapping).__name__}")
 
         before_cols = list(req.df.columns)
         out = req.df.rename(columns=mapping)
@@ -44,25 +44,25 @@ def rename() -> FieldMapper:
         applied = {src: dst for src, dst in applied.items() if dst in after_cols and src not in after_cols}
 
         logger.debug(f"[{step}] DONE | applied={applied} | shape={out.shape}")
-        return TransformationResult(df=out, issues=[], meta={"applied": applied})
+        return ProcessResult(df=out, issues=[], meta={"applied": applied})
 
     _fn.__name__ = step
     return _fn
 
 
-def to_snake_case() -> FieldMapper:
+def to_snake_case() -> TranformationProcessFn:
     """
     Config:
       to_snake_case: true
     """
     step = "to_snake_case"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         enabled = step_cfg(req, step)
         if enabled is not True:
-            raise TransformationConfigError(f"[{step}] Must be 'true'. Got: {repr(enabled)}")
+            raise ProcessConfigError(f"[{step}] Must be 'true'. Got: {repr(enabled)}")
 
         out = req.df.copy()
         before = list(out.columns)
@@ -71,13 +71,13 @@ def to_snake_case() -> FieldMapper:
 
         changed = {b: a for b, a in zip(before, after) if b != a}
         logger.debug(f"[{step}] DONE | changed={changed} | shape={out.shape}")
-        return TransformationResult(df=out, issues=[], meta={"changed": changed})
+        return ProcessResult(df=out, issues=[], meta={"changed": changed})
 
     _fn.__name__ = step
     return _fn
 
 
-def cast() -> FieldMapper:
+def cast() -> TranformationProcessFn:
     """
     Config:
       cast:
@@ -91,7 +91,7 @@ def cast() -> FieldMapper:
     """
     step = "cast"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -99,7 +99,7 @@ def cast() -> FieldMapper:
 
         dtypes = cfg.get("dtypes")
         if dtypes != "*" and not isinstance(dtypes, dict):
-            raise TransformationConfigError(f"[{step}] 'dtypes' must be '*' or dict[str,str]. Got: {type(dtypes).__name__}")
+            raise ProcessConfigError(f"[{step}] 'dtypes' must be '*' or dict[str,str]. Got: {type(dtypes).__name__}")
 
         out = req.df.copy()
 
@@ -108,7 +108,7 @@ def cast() -> FieldMapper:
             mode = "*"
         else:
             if not all(isinstance(k, str) and isinstance(v, str) for k, v in dtypes.items()):
-                raise TransformationConfigError(f"[{step}] 'dtypes' must be dict[str,str].")
+                raise ProcessConfigError(f"[{step}] 'dtypes' must be dict[str,str].")
             dtypes_dict = dtypes
             mode = "dict"
 
@@ -134,13 +134,13 @@ def cast() -> FieldMapper:
         logger.debug(
             f"[{step}] DONE | mode={mode} | attempted={attempted} | casted={casted} | missing={missing} | shape={out.shape}"
         )
-        return TransformationResult(df=out, issues=[], meta={"mode": mode, "attempted": attempted, "casted": casted, "missing": missing})
+        return ProcessResult(df=out, issues=[], meta={"mode": mode, "attempted": attempted, "casted": casted, "missing": missing})
 
     _fn.__name__ = step
     return _fn
 
 
-def value_map() -> FieldMapper:
+def value_map() -> TranformationProcessFn:
     """
     Config:
       value_map:
@@ -151,7 +151,7 @@ def value_map() -> FieldMapper:
     """
     step = "value_map"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -160,7 +160,7 @@ def value_map() -> FieldMapper:
         columns_param = ensure_columns_param(cfg.get("columns"), step=step)
         mapping = cfg.get("mapping")
         if not isinstance(mapping, dict):
-            raise TransformationConfigError(f"[{step}] 'mapping' must be a dict. Got: {type(mapping).__name__}")
+            raise ProcessConfigError(f"[{step}] 'mapping' must be a dict. Got: {type(mapping).__name__}")
 
         out = req.df.copy()
         cols_to_use = resolve_columns(out, columns_param)
@@ -178,13 +178,13 @@ def value_map() -> FieldMapper:
         logger.debug(
             f"[{step}] DONE | columns_param={columns_param!r} | resolved={cols_to_use} | updated={updated} | missing={missing} | mapping_size={len(mapping)} | shape={out.shape}"
         )
-        return TransformationResult(df=out, issues=[], meta={"resolved": cols_to_use, "updated": updated, "missing": missing, "mapping_size": len(mapping)})
+        return ProcessResult(df=out, issues=[], meta={"resolved": cols_to_use, "updated": updated, "missing": missing, "mapping_size": len(mapping)})
 
     _fn.__name__ = step
     return _fn
 
 
-def require() -> FieldMapper:
+def require() -> TranformationProcessFn:
     """
     Config:
       require:
@@ -192,7 +192,7 @@ def require() -> FieldMapper:
     """
     step = "require"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -204,16 +204,16 @@ def require() -> FieldMapper:
         missing_or_na = [c for c in cols if c not in req.df.columns or req.df[c].isna().any()]
         if missing_or_na:
             logger.error(f"[{step}] FAILED | missing_or_na={missing_or_na}")
-            raise TransformationConfigError(f"[{step}] Required columns missing/NA: {missing_or_na}")
+            raise ProcessConfigError(f"[{step}] Required columns missing/NA: {missing_or_na}")
 
         logger.debug(f"[{step}] DONE | required_ok={cols} | shape={req.df.shape}")
-        return TransformationResult(df=req.df, issues=[], meta={"required_ok": cols})
+        return ProcessResult(df=req.df, issues=[], meta={"required_ok": cols})
 
     _fn.__name__ = step
     return _fn
 
 
-def drop_columns() -> FieldMapper:
+def drop_columns() -> TranformationProcessFn:
     """
     Config:
       drop_columns:
@@ -221,7 +221,7 @@ def drop_columns() -> FieldMapper:
     """
     step = "drop_columns"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -229,19 +229,19 @@ def drop_columns() -> FieldMapper:
 
         columns = cfg.get("columns")
         if not (isinstance(columns, list) and all(isinstance(c, str) for c in columns)):
-            raise TransformationConfigError(f"[{step}] 'columns' must be list[str]. Got: {type(columns).__name__}")
+            raise ProcessConfigError(f"[{step}] 'columns' must be list[str]. Got: {type(columns).__name__}")
 
         existing = [c for c in columns if c in req.df.columns]
         out = req.df.drop(columns=existing, errors="ignore")
 
         logger.debug(f"[{step}] DONE | requested={columns} | dropped={existing} | shape={out.shape}")
-        return TransformationResult(df=out, issues=[], meta={"requested": columns, "dropped": existing})
+        return ProcessResult(df=out, issues=[], meta={"requested": columns, "dropped": existing})
 
     _fn.__name__ = step
     return _fn
 
 
-def fill_defaults() -> FieldMapper:
+def fill_defaults() -> TranformationProcessFn:
     """
     Config:
       fill_defaults:
@@ -254,7 +254,7 @@ def fill_defaults() -> FieldMapper:
     """
     step = "fill_defaults"
 
-    def _fn(req: TransformationRequest) -> TransformationResult:
+    def _fn(req: TransformationRequest) -> ProcessResult:
         logger.debug(f"[{step}] START")
 
         cfg = require_dict(step_cfg(req, step), step=step, key=step)
@@ -262,7 +262,7 @@ def fill_defaults() -> FieldMapper:
 
         defaults = cfg.get("defaults")
         if defaults != "*" and not isinstance(defaults, dict):
-            raise TransformationConfigError(f"[{step}] 'defaults' must be '*' or dict[str,Any]. Got: {type(defaults).__name__}")
+            raise ProcessConfigError(f"[{step}] 'defaults' must be '*' or dict[str,Any]. Got: {type(defaults).__name__}")
 
         out = req.df.copy()
 
@@ -286,7 +286,7 @@ def fill_defaults() -> FieldMapper:
         logger.debug(
             f"[{step}] DONE | mode={mode} | filled_cols={filled_cols} | missing_cols={missing_cols} | shape={out.shape}"
         )
-        return TransformationResult(df=out, issues=[], meta={"mode": mode, "filled_cols": filled_cols, "missing_cols": missing_cols})
+        return ProcessResult(df=out, issues=[], meta={"mode": mode, "filled_cols": filled_cols, "missing_cols": missing_cols})
 
     _fn.__name__ = step
     return _fn

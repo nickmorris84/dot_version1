@@ -1,0 +1,8 @@
+schema_validation_gate:
+  mode: report
+  attach_metric: true
+
+schema_validation_post_transform:
+  mode: enforce
+  attach_metric: true
+  reject_on_report: true

@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import Any, Dict, List
 
-from digital_operation_twin.core.models.event import Event
+from digital_operation_twin.core.models.shemas.event import Event
 from digital_operation_twin.pipelines.transforms.validator import ValidatorPipeline
 
 import logging

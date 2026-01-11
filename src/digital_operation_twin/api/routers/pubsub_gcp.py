@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 
-from digital_operation_twin.api.api_submit import submit_api
+from digital_operation_twin.pipelines.api_submit import submit_api
 from digital_operation_twin.api.deps import (
     get_orchestrator_pubsub,
     get_pubsub_body,

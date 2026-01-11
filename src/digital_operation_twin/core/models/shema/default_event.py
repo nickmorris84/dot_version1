@@ -6,7 +6,7 @@ import pandas as pd
 
 # ---------- Record model (captures extras) ----------
 @dataclass(frozen=True)
-class Event:
+class EventDefault:
     #Core requirements for the event
     event_id: str
     journey_id: str
@@ -27,7 +27,7 @@ class Event:
     extra: Dict[str, Any] = field(default_factory=dict) 
 
     @classmethod
-    def from_dict(cls, row: Dict[str, Any]) -> "Event":
+    def from_dict(cls, row: Dict[str, Any]) -> "EventDefault":
         # Known fields (everything except extra)
         known = {f for f in cls.__dataclass_fields__.keys() if f != "extra"}  # type: ignore[attr-defined]
 

@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 from digital_operation_twin.core.models.api_gate import APIModel
 from digital_operation_twin.pipelines.orchestrators.master_orchestration import MasterOrchestrator
 from digital_operation_twin.services.csv_ingestion import CsvIngestionService
-from digital_operation_twin.api.api_submit import submit_api
+from digital_operation_twin.pipelines.api_submit import submit_api
 
 from digital_operation_twin.api.deps import get_settings_rest, get_orchestrator_rest
 from digital_operation_twin.config.schema import Settings

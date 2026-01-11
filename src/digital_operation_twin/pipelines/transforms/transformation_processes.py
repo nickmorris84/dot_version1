@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 import pandas as pd
 import logging
 
-from digital_operation_twin.core.models.transformation_request import TransformationRequest, FieldMapper, TransformationConfigError, TransformationResult, Issue
+from digital_operation_twin.core.models.transformation_processIO import TransformationRequest, TranformationProcessFn, ProcessConfigError, ProcessResult, Issue
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ class TransformationRunner:
     """
     Configure once with:
       - cfg (dict): step configs enabling each step
-      - registry (dict): step_name -> factory() returning FieldMapper
+      - registry (dict): step_name -> factory() returning TranformationProcessFn
       - order (sequence): default execution order
 
     Optional config override:
@@ -30,17 +30,17 @@ class TransformationRunner:
         self,
         *,
         cfg: Dict[str, Any],
-        registry: Dict[str, Callable[[], FieldMapper]],
+        registry: Dict[str, Callable[[], TranformationProcessFn]],
         order: Sequence[str],
         strict: bool = True,
         verbose: bool = False,
     ):
         if not isinstance(cfg, dict):
-            raise TransformationConfigError(f"cfg must be dict, got {type(cfg).__name__}")
+            raise ProcessConfigError(f"cfg must be dict, got {type(cfg).__name__}")
         if not registry:
-            raise TransformationConfigError("registry must be non-empty")
+            raise ProcessConfigError("registry must be non-empty")
         if not order:
-            raise TransformationConfigError("order must be non-empty")
+            raise ProcessConfigError("order must be non-empty")
 
         self.cfg = cfg
         self.registry = registry
@@ -48,7 +48,7 @@ class TransformationRunner:
         self.strict = strict
         self.verbose = verbose
 
-        self.steps: List[FieldMapper] = self._build_steps()
+        self.steps: List[TranformationProcessFn] = self._build_steps()
 
         logger.info(
             "[TransformationRunner] Initialized | enabled_steps=%s",
@@ -71,19 +71,19 @@ class TransformationRunner:
             return list(self.default_order)
 
         if not isinstance(override, list) or not all(isinstance(x, str) for x in override):
-            raise TransformationConfigError(
+            raise ProcessConfigError(
                 f"{self.ORDER_KEY} must be list[str], got {repr(override)}"
             )
 
         unknown = [s for s in override if s not in self.registry]
         if unknown:
-            raise TransformationConfigError(
+            raise ProcessConfigError(
                 f"{self.ORDER_KEY} contains unknown steps: {unknown}"
             )
 
         return override
 
-    def _build_steps(self) -> List[FieldMapper]:
+    def _build_steps(self) -> List[TranformationProcessFn]:
         known_steps = set(self.registry.keys())
 
         # Validate unknown cfg keys (excluding reserved keys)
@@ -93,7 +93,7 @@ class TransformationRunner:
                 if k not in known_steps and k != self.ORDER_KEY
             ]
             if unknown_cfg_keys:
-                raise TransformationConfigError(
+                raise ProcessConfigError(
                     f"Unknown config keys: {unknown_cfg_keys}. Known steps: {sorted(known_steps)}"
                 )
 
@@ -112,11 +112,11 @@ class TransformationRunner:
         missing = sorted(enabled - set(ordered_steps))
         ordered_steps.extend(missing)
 
-        steps: List[FieldMapper] = []
+        steps: List[TranformationProcessFn] = []
         for name in ordered_steps:
             factory = self.registry.get(name)
             if not factory:
-                raise TransformationConfigError(f"Step '{name}' not registered")
+                raise ProcessConfigError(f"Step '{name}' not registered")
             steps.append(factory())
 
         return steps
@@ -125,7 +125,7 @@ class TransformationRunner:
     # Execution
     # ------------------------------------------------------------------
 
-    def run(self, df: pd.DataFrame) -> TransformationResult:
+    def run(self, df: pd.DataFrame) -> ProcessResult:
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"df must be DataFrame, got {type(df).__name__}")
 
@@ -159,7 +159,7 @@ class TransformationRunner:
             out.shape,
             len(all_issues),
         )
-        return TransformationResult(df=out, issues=all_issues, meta=all_meta)
+        return ProcessResult(df=out, issues=all_issues, meta=all_meta)
 
     # ------------------------------------------------------------------
     # Introspection / lifecycle
@@ -174,7 +174,7 @@ class TransformationRunner:
         """
         if cfg is not None:
             if not isinstance(cfg, dict):
-                raise TransformationConfigError("cfg must be dict")
+                raise ProcessConfigError("cfg must be dict")
             self.cfg = cfg
 
         self.steps = self._build_steps()
