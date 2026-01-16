@@ -6,18 +6,16 @@ import pandas as pd
 import logging
 import re
 
-from digital_operation_twin.core.models.transformation_processIO import TransformationRequest, TranformationProcessFn, ProcessConfigError, ProcessResult
+from digital_operation_twin.core.models.processIO import TransformationRequest, ProcessFn, ProcessConfigError, ProcessResult
 from digital_operation_twin.core.utils import step_cfg, ensure_columns_param, resolve_columns, require_dict, require_keys, coerce_list_of_str
 
 logger = logging.getLogger(__name__)
-
-
 
 # ============================================================
 # NORMALIZER steps (now all: TranformationProcessFn(req)->ProcessResult)
 # ============================================================
 
-def trim_strings() -> TranformationProcessFn:
+def trim_strings() -> ProcessFn:
     """
     Config:
       trim_strings: true
@@ -53,13 +51,17 @@ def trim_strings() -> TranformationProcessFn:
                 updated_cols.append(col)
 
         logger.debug(f"[{step}] DONE | columns_param={columns_param!r} | updated_cols={updated_cols} | shape={out.shape}")
-        return ProcessResult(df=out, issues=[], meta={"columns_param": columns_param, "updated_cols": updated_cols})
+        return ProcessResult(
+            state=req.state,
+            df=out, 
+            errors=[], 
+            meta={"columns_param": columns_param, "updated_cols": updated_cols})
 
     _fn.__name__ = step
     return _fn
 
 
-def normalize_case() -> TranformationProcessFn:
+def normalize_case() -> ProcessFn:
     """
     Config:
       normalize_case:
@@ -100,8 +102,9 @@ def normalize_case() -> TranformationProcessFn:
             f"[{step}] DONE | case={case!r} | columns_param={columns_param!r} | updated_cols={updated_cols} | shape={out.shape}"
         )
         return ProcessResult(
-            df=out,
-            issues=[],
+            state=req.state,
+            df=out, 
+            errors=[], 
             meta={"columns_param": columns_param, "case": case, "updated_cols": updated_cols},
         )
 
@@ -109,7 +112,7 @@ def normalize_case() -> TranformationProcessFn:
     return _fn
 
 
-def remove_special_chars() -> TranformationProcessFn:
+def remove_special_chars() -> ProcessFn:
     """
     Config:
       remove_special_chars:
@@ -161,8 +164,9 @@ def remove_special_chars() -> TranformationProcessFn:
             f"[{step}] DONE | columns_param={columns_param!r} | pattern={pattern!r} | updated_cols={updated_cols} | shape={out.shape}"
         )
         return ProcessResult(
-            df=out,
-            issues=[],
+            state=req.state,
+            df=out, 
+            errors=[], 
             meta={"columns_param": columns_param, "pattern": pattern, "updated_cols": updated_cols},
         )
 
@@ -170,7 +174,7 @@ def remove_special_chars() -> TranformationProcessFn:
     return _fn
 
 
-def replace_nulls() -> TranformationProcessFn:
+def replace_nulls() -> ProcessFn:
     """
     Config:
       replace_nulls:
@@ -201,8 +205,9 @@ def replace_nulls() -> TranformationProcessFn:
             f"[{step}] DONE | columns_param={columns_param!r} | null_values={null_values!r} | updated_cols={updated_cols} | shape={out.shape}"
         )
         return ProcessResult(
-            df=out,
-            issues=[],
+            state=req.state,
+            df=out, 
+            errors=[], 
             meta={"columns_param": columns_param, "null_values": null_values, "updated_cols": updated_cols},
         )
 
@@ -210,7 +215,7 @@ def replace_nulls() -> TranformationProcessFn:
     return _fn
 
 
-def standardize_booleans() -> TranformationProcessFn:
+def standardize_booleans() -> ProcessFn:
     """
     Config:
       standardize_booleans: true
@@ -264,8 +269,9 @@ def standardize_booleans() -> TranformationProcessFn:
             f"true_vals={sorted(true_set)!r} | false_vals={sorted(false_set)!r} | shape={out.shape}"
         )
         return ProcessResult(
-            df=out,
-            issues=[],
+            state=req.state,
+            df=out, 
+            errors=[], 
             meta={
                 "cfg_mode": cfg_mode,
                 "columns_param": columns_param,
@@ -279,7 +285,7 @@ def standardize_booleans() -> TranformationProcessFn:
     return _fn
 
 
-def clean_currency() -> TranformationProcessFn:
+def clean_currency() -> ProcessFn:
     """
     Config:
       clean_currency:
@@ -320,8 +326,9 @@ def clean_currency() -> TranformationProcessFn:
             f"[{step}] DONE | columns_param={columns_param!r} | strip_pattern={strip_pattern!r} | updated_cols={updated_cols} | shape={out.shape}"
         )
         return ProcessResult(
-            df=out,
-            issues=[],
+            state=req.state,
+            df=out, 
+            errors=[], 
             meta={"columns_param": columns_param, "strip_pattern": strip_pattern, "updated_cols": updated_cols},
         )
 
@@ -329,7 +336,7 @@ def clean_currency() -> TranformationProcessFn:
     return _fn
 
 
-def normalize_dates() -> TranformationProcessFn:
+def normalize_dates() -> ProcessFn:
     """
     Config:
       normalize_dates:
@@ -364,8 +371,9 @@ def normalize_dates() -> TranformationProcessFn:
             f"[{step}] DONE | columns_param={columns_param!r} | format={fmt!r} | updated_cols={updated_cols} | shape={out.shape}"
         )
         return ProcessResult(
-            df=out,
-            issues=[],
+            state=req.state,
+            df=out, 
+            errors=[], 
             meta={"columns_param": columns_param, "format": fmt, "updated_cols": updated_cols},
         )
 

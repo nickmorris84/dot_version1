@@ -15,18 +15,16 @@ ResultStatus = Literal["continue", "accepted", "rejected", "duplicate"]
 Mode = Literal["report", "enforce"]
 
 @dataclass(frozen=True)
-class ApiGateRequest:
-    step_type: str = "api_gate"
-    state: PipelineState
+class ApiGateRequest: 
     msg: Any
-    cfg: Dict[str, Any] = field(default_factory=dict)
+    cfg: Dict[str, Any]
+    step_type: str = field(default="gate", init=False)
 
 @dataclass(frozen=True)
 class TransformationRequest:
-    step_type: str = "transformation"
     state: PipelineState
-    df: pd.DataFrame
     cfg: Dict[str, Any] = field(default_factory=dict)
+    step_type: str = field(default="transformation", init=False)
 
 # ============================================================
 # Standard result (same everywhere)
@@ -61,7 +59,7 @@ class ProcessResult:
 
 
 ProcessFn = Callable[[Any], ProcessResult]
-Registry = Dict[str, Callable[[], ProcessFn[Any]]]
+Registry = Dict[str, Callable[[Any], ProcessFn]]
 ReqType = TypeVar("ReqType")
 
 

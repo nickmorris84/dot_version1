@@ -9,26 +9,23 @@ data_config:
     extract_envelope: true
     normalize_payload: true
     idempotency_check: true
-    schema_validation:
-      mode: report
-      attach_metric: true
 
-  normaliser:
+  normalizer:
     trim_strings: true
     normalize_case: { columns: "*", case: lower }
 
-  standardiser:
+  standardizer:
     to_snake_case: true
-    rename: { mapping: { 
-      "activity_id": "event_id",
-      "Application_id": "journey_id",
-      "stage": "step",
-      "product_type": "product",
-      "stage_start_time": "start_ts",
-      "stage_end_time": "end_ts",
-      "activity_type": "event_type",
-      "activity_notes": "event_description",
-      "risk_grade": "event_codes"} }
+    rename:
+      activity_id: event_id
+      application_id: journey_id
+      stage: step
+      product_type: product
+      stage_start_time: start_ts
+      stage_end_time: end_ts
+      activity_type: event_type
+      activity_notes: event_description
+      risk_grade: event_codes
 
   # per-record classifiers
   # classifiers:
@@ -37,10 +34,16 @@ data_config:
   #       levels: [high, critical]
   #   - name: status_label
 
-  data_quality:
+  validator:
     check_required_columns: { columns: ["event_id", "customer_id"] }
 
-  schema_enforce:
-    schema_validation:
-      mode: enforce
-      supported_versions: ["v1"]
+  schema:
+    schema_validation_gate:
+      mode: report
+      reject_on_report: false
+      attach_metric: true
+      
+    schema_validation_post_transformation:
+        mode: enforce
+        reject_on_report: true
+        attach_metric: true

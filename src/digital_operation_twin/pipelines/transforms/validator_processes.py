@@ -2,7 +2,7 @@ import logging
 from typing import Callable, Dict, List, Any, Optional
 import pandas as pd
 
-from digital_operation_twin.core.models.transformation_processIO import TransformationRequest, TranformationProcessFn, ProcessConfigError, ProcessResult, Issue
+from digital_operation_twin.core.models.processIO import TransformationRequest, ProcessFn, ProcessConfigError, ProcessResult
 from digital_operation_twin.core.utils import step_cfg, ensure_columns_param, resolve_columns, require_dict, require_keys
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # Validators (now TranformationProcessFn -> ProcessResult)
 # -------------------------
 
-def check_required_columns() -> TranformationProcessFn:
+def check_required_columns() -> ProcessFn:
     """
     Config:
       check_required_columns:
@@ -28,22 +28,23 @@ def check_required_columns() -> TranformationProcessFn:
         columns_param = ensure_columns_param(cfg.get("columns"), step=step)
         cols = resolve_columns(req.df, columns_param)
 
-        issues: List[Issue] = []
+        errors: List[Dict[str, Any]] = []
         missing: List[str] = []
 
         for col in cols:
             if col not in req.df.columns:
                 missing.append(col)
-                issues.append({
+                errors.append({
                     "type": "missing_column",
                     "column": col,
                     "message": f"Missing required column: {col}",
                 })
 
-        logger.debug(f"[{step}] DONE | checked={cols} | missing={missing} | issues={len(issues)}")
+        logger.debug(f"[{step}] DONE | checked={cols} | missing={missing} | issues={len(errors)}")
         return ProcessResult(
+            state=req.state,
             df=req.df,
-            issues=issues,
+            errors=errors,
             meta={"checked": cols, "missing": missing},
         )
 
@@ -51,7 +52,7 @@ def check_required_columns() -> TranformationProcessFn:
     return _fn
 
 
-def check_nulls() -> TranformationProcessFn:
+def check_nulls() -> ProcessFn:
     """
     Config:
       check_nulls:
@@ -68,7 +69,7 @@ def check_nulls() -> TranformationProcessFn:
         columns_param = ensure_columns_param(cfg.get("columns"), step=step)
         cols = resolve_columns(req.df, columns_param)
 
-        issues: List[Issue] = []
+        errors: List[Dict[str, Any]] = []
         checked: List[str] = []
         missing: List[str] = []
         null_counts: Dict[str, int] = {}
@@ -76,7 +77,7 @@ def check_nulls() -> TranformationProcessFn:
         for col in cols:
             if col not in req.df.columns:
                 missing.append(col)
-                issues.append({
+                errors.append({
                     "type": "missing_column",
                     "column": col,
                     "message": f"Missing required column: {col}",
@@ -88,7 +89,7 @@ def check_nulls() -> TranformationProcessFn:
             null_counts[col] = null_count
 
             if null_count > 0:
-                issues.append({
+                errors.append({
                     "type": "null_values",
                     "column": col,
                     "null_count": null_count,
@@ -97,11 +98,12 @@ def check_nulls() -> TranformationProcessFn:
 
         logger.debug(
             f"[{step}] DONE | columns_param={columns_param!r} | resolved={cols} | checked={checked} | "
-            f"missing={missing} | issues={len(issues)}"
+            f"missing={missing} | issues={len(errors)}"
         )
         return ProcessResult(
+            state=req.state,
             df=req.df,
-            issues=issues,
+            errors=errors,
             meta={"resolved": cols, "checked": checked, "missing": missing, "null_counts": null_counts},
         )
 
@@ -109,7 +111,7 @@ def check_nulls() -> TranformationProcessFn:
     return _fn
 
 
-def check_value_range() -> TranformationProcessFn:
+def check_value_range() -> ProcessFn:
     """
     Config:
       check_value_range:
@@ -137,16 +139,20 @@ def check_value_range() -> TranformationProcessFn:
         if max_val is not None and not isinstance(max_val, (int, float)):
             raise ProcessConfigError(f"[{step}] 'max' must be a number or null. Got: {type(max_val).__name__}")
 
-        issues: List[Issue] = []
+        errors: List[Dict[str, Any]] = []
 
         if column not in req.df.columns:
-            issues.append({
+            errors.append({
                 "type": "missing_column",
                 "column": column,
                 "message": f"Missing required column: {column}",
             })
             logger.debug(f"[{step}] DONE | column={column!r} missing | issues=1")
-            return ProcessResult(df=req.df, issues=issues, meta={"column": column, "min": min_val, "max": max_val})
+            return ProcessResult(
+                state = req.state,
+                df=req.df, 
+                errros=errors,
+                meta={"column": column, "min": min_val, "max": max_val})
 
         # Range checks should operate on numeric values; do not mutate the df.
         s = pd.to_numeric(req.df[column], errors="coerce")
@@ -157,7 +163,7 @@ def check_value_range() -> TranformationProcessFn:
         if min_val is not None:
             below_count = int((s < float(min_val)).sum())
             if below_count > 0:
-                issues.append({
+                errors.append({
                     "type": "value_below_min",
                     "column": column,
                     "count": below_count,
@@ -168,7 +174,7 @@ def check_value_range() -> TranformationProcessFn:
         if max_val is not None:
             above_count = int((s > float(max_val)).sum())
             if above_count > 0:
-                issues.append({
+                errors.append({
                     "type": "value_above_max",
                     "column": column,
                     "count": above_count,
@@ -178,11 +184,12 @@ def check_value_range() -> TranformationProcessFn:
 
         logger.debug(
             f"[{step}] DONE | column={column!r} | min={min_val!r} | max={max_val!r} | "
-            f"below={below_count} | above={above_count} | issues={len(issues)}"
+            f"below={below_count} | above={above_count} | issues={len(errors)}"
         )
         return ProcessResult(
+            state = req.state,
             df=req.df,
-            issues=issues,
+            errors=errors,
             meta={"column": column, "min": min_val, "max": max_val, "below": below_count, "above": above_count},
         )
 

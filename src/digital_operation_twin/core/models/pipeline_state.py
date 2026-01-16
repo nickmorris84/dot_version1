@@ -9,17 +9,18 @@ import pandas as pd
 class PipelineState:
     # identifiers / metadata
     event_id: str
-    schema_version: str = "v1"
+    schema_version: str = None
     customer_id: Optional[str] = None
 
     # data representations (use whichever is available at a given stage)
     records: List[Dict[str, Any]] = field(default_factory=list)   # list-of-dicts (edge/gate)
-    df: Optional[pd.DataFrame] = None                              # DataFrame (heavy transform)
+    df: pd.DataFrame = None                              # DataFrame (heavy transform)
 
     # results / observability
     status: str = "init"                                           # init|accepted|rejected|running|done|failed
     errors: List[Dict[str, Any]] = field(default_factory=list)
     metrics: Dict[str, Any] = field(default_factory=dict)
+    # lineage: Dict[str, Any] = field(default_factory=dict)
     timings_ms: Dict[str, int] = field(default_factory=dict)
 
     # carry config & misc context

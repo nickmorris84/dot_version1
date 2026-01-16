@@ -12,6 +12,11 @@ from digital_operation_twin.config.schema import Settings
 logger = logging.getLogger(__name__)
 
 
+def get_runtime_env() -> str:
+    env = os.getenv("APP_ENV", "dev")
+    logger.info("Runtime env resolved to APP_ENV=%s", env)
+    return env
+
 def _expand_env(obj: Any) -> Any:
     """Expand ${VAR} in YAML strings recursively."""
     if isinstance(obj, str):
@@ -118,10 +123,7 @@ class ConfigStore:
         return Settings.model_validate(merged)
 
 
-def get_runtime_env() -> str:
-    env = os.getenv("APP_ENV", "dev")
-    logger.info("Runtime env resolved to APP_ENV=%s", env)
-    return env
+
 
 
 def load_config_store(config_dir: str, env: str) -> ConfigStore:

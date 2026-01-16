@@ -4,11 +4,12 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Generic, List, Optional, Sequence, TypeVar
 
 import logging
-from datetime import time
+import time
+from datetime import time as dt_time
 
 from digital_operation_twin.core.models.pipeline_state import PipelineState
 from digital_operation_twin.core.models.processIOAdaptor import ProcessIOAdapter
-from digital_operation_twin.core.models.processIO import ProcessIOAdapter, ProcessResult, ProcessFn, Registry
+from digital_operation_twin.core.models.processIO import ProcessResult, ProcessFn, Registry
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ class ProcessRunner:
         for idx, step_fn in enumerate(self.steps, 1):
             step_name = getattr(step_fn, "__name__", step_fn.__class__.__name__)
             logger.debug("[%s] START step=%s (%s/%s)", self.segment_name, step_name, idx, len(self.steps))
-
+            
             req = self.adapter.build_request(
                 state=acc.state,
                 cfg=self.cfg,
@@ -125,12 +126,15 @@ class ProcessRunner:
             t0 = time.perf_counter()
             try:
                 out = step_fn(req)
+                inputs['df'] = out.df
             except Exception as e:
                 logger.exception("[%s] FAILED step=%s", self.segment_name, step_name)
                 return acc.reject(code="step_failed", message=f"{step_name} failed: {e}", step=step_name)
 
             duration_ms = int((time.perf_counter() - t0) * 1000)
             acc = self._merge(acc, out, step=step_name, duration_ms=duration_ms)
+            
+            
 
             if self.verbose:
                 logger.debug("[%s] DONE step=%s status=%s errors_total=%s duration_ms=%s", self.segment_name, step_name, acc.status, len(acc.errors), duration_ms)

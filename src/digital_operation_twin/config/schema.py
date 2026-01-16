@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, Dict, List, Literal, Optional, Union
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class AppConfig(BaseModel):
@@ -34,17 +34,87 @@ class DatabaseConfig(BaseModel):
     echo: bool = False
 
 
-class StandardiserConfig(BaseModel):
+# ---------- Shared / helpers ----------
+
+class SchemaValidationConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["report", "enforce"] = "report"
+    input_source: Literal["records", "df"] = "records"
+    attach_metric: bool = False
+    reject_on_report: bool = False
+    supported_versions: List[str] = Field(default_factory=list)
+
+
+class RequiredColumnsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    columns: List[str] = Field(default_factory=list)
+
+
+# ---------- Pipeline blocks ----------
+
+class GateConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    extract_envelope: bool = False
+    normalize_payload: bool = False
+    idempotency_check: bool = False
+    schema_validation: Optional[SchemaValidationConfig] = None
+
+
+class NormalizeCaseConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    columns: str = "*"                      # "*" or comma-list etc (your convention)
+    case: Literal["lower", "upper"] = "lower"
+
+
+class NormalizerConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    trim_strings: bool = False
+    normalize_case: Optional[NormalizeCaseConfig] = None
+
+    @field_validator("normalize_case", mode="before")
+    @classmethod
+    def _coerce_normalize_case(cls, v: Any) -> Any:
+        # Allow normalize_case to be supplied as a dict (YAML map) — it already is,
+        # but this also protects against odd types.
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return v
+        raise TypeError("normalize_case must be a mapping like {columns: '*', case: 'lower'}")
+
+
+class StandardizerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     to_snake_case: Optional[bool] = None
-    # Column rename mapping
     rename: Dict[str, str] = Field(default_factory=dict)
 
+    @field_validator("rename", mode="before")
+    @classmethod
+    def _coerce_rename(cls, v: Any) -> Any:
+        # Support BOTH:
+        # rename: {old: new}
+        # rename: {mapping: {old: new}}
+        if v is None:
+            return {}
+        if isinstance(v, dict) and "mapping" in v and isinstance(v["mapping"], dict):
+            return v["mapping"]
+        if isinstance(v, dict):
+            return v
+        raise TypeError("rename must be a mapping like {old: new} or {mapping: {old: new}}")
 
-class DataQualityConfig(BaseModel):
+
+class ValidatorConfig(BaseModel):
+    """
+    Your YAML uses `validater:` (note spelling). We'll support it via aliasing in DataConfig.
+    """
     model_config = ConfigDict(extra="forbid")
-    dataset_steps: List[str] = Field(default_factory=list)
-    row_steps: List[str] = Field(default_factory=list)
+    check_required_columns: Optional[RequiredColumnsConfig] = None
+
+
+class SchemaConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    schema_validation_gate: Optional[SchemaValidationConfig] = None
+    schema_validation_post_transformation: Optional[SchemaValidationConfig] = None
 
 
 class ClassifierConfig(BaseModel):
@@ -55,13 +125,29 @@ class ClassifierConfig(BaseModel):
 
 class DataConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
     source: Optional[str] = None
-    standardiser: StandardiserConfig = StandardiserConfig()
-    data_quality: DataQualityConfig = DataQualityConfig()
+
+    gate: Optional[GateConfig] = None
+    normalizer: Optional[NormalizerConfig] = None
+    standardizer: StandardizerConfig = StandardizerConfig()
+
+    validator: Optional[ValidatorConfig] = None
+
+    schema: Optional[SchemaConfig] = None
+
     classifiers: List[ClassifierConfig] = Field(default_factory=list)
-    # Allow additional config blocks that your pipeline expects today without breaking.
-    # You can gradually type these later.
-    extra: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("validator", mode="before")
+    @classmethod
+    def _coerce_validator(cls, v: Any) -> Any:
+        # allow providing `validator:` normally
+        return v
+
+    def effective_validator(self) -> Optional[ValidatorConfig]:
+        # helper in runtime: prefer `validator`, fallback to `validater`
+        return self.validator
+
 
 
 class Settings(BaseModel):
@@ -79,4 +165,4 @@ class Settings(BaseModel):
     database: DatabaseConfig = DatabaseConfig()
 
     # Pipeline configuration
-    data_config: DataConfig = DataConfig()
+    data_config: DataConfig = DataConfig() 

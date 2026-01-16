@@ -13,12 +13,40 @@ import yaml
 import os
 import json
 import pandas as pd
+import re
 
 from digital_operation_twin.core.models.pipeline_state import PipelineState
 
 
 # Use your centralized logger if you have one; otherwise the stdlib logger:
 logger = logging.getLogger(__name__)
+
+# PRINTING
+
+
+def pretty_json(obj: Any, *, indent: int = 2, sort_keys: bool = True) -> str:
+    """Return a JSON-formatted string (handles non-JSON objects via str)."""
+    return json.dumps(
+        obj,
+        indent=indent,
+        sort_keys=sort_keys,
+        ensure_ascii=False,
+        default=str,  # <- handles Path, datetime, Enum, etc.
+    )
+
+def pdic(obj: Any, *, indent: int = 2) -> None:
+    print(pretty_json(obj, indent=indent))
+    
+
+# RUNTIME
+
+def get_runtime_env() -> str:
+    env = os.getenv("APP_ENV", "dev")
+    logger.info("Runtime env resolved to APP_ENV=%s", env)
+    return env
+
+
+# API
 
 
 def records_to_df(records: List[Dict[str, Any]]) -> pd.DataFrame:

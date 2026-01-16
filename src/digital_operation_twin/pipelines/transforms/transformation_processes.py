@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 import pandas as pd
 import logging
 
-from digital_operation_twin.core.models.transformation_processIO import TransformationRequest, TranformationProcessFn, ProcessConfigError, ProcessResult, Issue
+from digital_operation_twin.core.models.processIO import TransformationRequest, ProcessConfigError, ProcessResult, ProcessFn
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class TransformationRunner:
         self,
         *,
         cfg: Dict[str, Any],
-        registry: Dict[str, Callable[[], TranformationProcessFn]],
+        registry: Dict[str, Callable[[], ProcessFn]],
         order: Sequence[str],
         strict: bool = True,
         verbose: bool = False,
@@ -48,7 +48,7 @@ class TransformationRunner:
         self.strict = strict
         self.verbose = verbose
 
-        self.steps: List[TranformationProcessFn] = self._build_steps()
+        self.steps: List[ProcessFn] = self._build_steps()
 
         logger.info(
             "[TransformationRunner] Initialized | enabled_steps=%s",
@@ -83,7 +83,7 @@ class TransformationRunner:
 
         return override
 
-    def _build_steps(self) -> List[TranformationProcessFn]:
+    def _build_steps(self) -> List[ProcessFn]:
         known_steps = set(self.registry.keys())
 
         # Validate unknown cfg keys (excluding reserved keys)
@@ -112,7 +112,7 @@ class TransformationRunner:
         missing = sorted(enabled - set(ordered_steps))
         ordered_steps.extend(missing)
 
-        steps: List[TranformationProcessFn] = []
+        steps: List[ProcessFn] = []
         for name in ordered_steps:
             factory = self.registry.get(name)
             if not factory:
@@ -130,7 +130,7 @@ class TransformationRunner:
             raise TypeError(f"df must be DataFrame, got {type(df).__name__}")
 
         out = df.copy()
-        all_issues: List[Issue] = []
+        all_issues: List[Dict[str, Any]] = []
         all_meta: Dict[str, Any] = {}
 
         for idx, step in enumerate(self.steps, 1):

@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Literal
 
 import logging
 
-from digital_operation_twin.core.models.processIO import ProcessRequest, ProcessConfigError, ProcessResult, ProcessFn, Mode
+from digital_operation_twin.core.models.processIO import ApiGateRequest, ProcessConfigError, ProcessResult, ProcessFn, Mode
 from digital_operation_twin.core.utils import validate_one_record_against_model
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def extract_envelope() -> Callable[[], ProcessFn]:
     step = "extract_envelope"
 
-    def _fn(req: ProcessRequest) -> ProcessResult:
+    def _fn(req: ApiGateRequest) -> ProcessResult:
         logger.debug("[%s.%s] START", req.step_name, step)
         state = req.state
         env = req.msg.envelope
@@ -32,7 +32,7 @@ def extract_envelope() -> Callable[[], ProcessFn]:
 def normalize_payload() -> Callable[[], ProcessFn]:
     step = "normalize_payload"
 
-    def _fn(req: ProcessRequest) -> ProcessResult:
+    def _fn(req: ApiGateRequest) -> ProcessResult:
         logger.debug("[%s.%s] START", req.step_name, step)
         state = req.state
         payload = req.msg.payload
@@ -94,7 +94,7 @@ def idempotency(*, store: Any) -> Callable[[], ProcessFn]:
     if isinstance(store, type):
         store = store()
 
-    def _fn(req: ProcessRequest) -> ProcessResult:
+    def _fn(req: ApiGateRequest) -> ProcessResult:
         logger.debug("[%s.%s] START", req.step_name, step)
         state = req.state
 

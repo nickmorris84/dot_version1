@@ -1,3 +1,6 @@
+%load_ext autoreload
+%autoreload 2
+
 import asyncio
 import json
 import time
@@ -5,6 +8,7 @@ import logging
 from pathlib import Path
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from pprint import pprint
 
 import pandas as pd
 
@@ -13,34 +17,35 @@ REPO_ROOT = Path("/Users/nickmorris/DOT version3.0 2")
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from digital_operation_twin.core.models.pipeline_state import PipelineState
+from digital_operation_twin.core.models.processIOAdaptor import GATE_ADAPTER, TRANSFORM_ADAPTER
+from digital_operation_twin.core.registry.gate_registry import API_GATE_REGISTRY, API_GATE_ORDER
+from digital_operation_twin.core.registry.schema_registry import SCHEMA_VALIDATION_REGISTRY, SCHEMA_REGISTRY, SCHEMA_VALIDATION_ORDER
+from digital_operation_twin.core.registry.transform_registry import VALIDATOR_REGISTRY, NORMALIZER_REGISTRY, VALIDATOR_ORDER, NORMALIZER_ORDER, STANDARDIZER_REGISTRY, STANDARDIZER_ORDER
 from digital_operation_twin.core.logger import capture_logs_for_step, detach
-from digital_operation_twin.core.utils import write_df, summarize_nulls
-from digital_operation_twin.config.loader import load_config_store, get_runtime_env
-
-
-def cfg_get(obj, key, default=None):
-    if obj is None:
-        return default
-    # dict-style
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    # ConfigStore-style: try attribute
-    if hasattr(obj, key):
-        return getattr(obj, key)
-    # ConfigStore-style: try __getitem__
-    try:
-        return obj[key]
-    except Exception:
-        return default
+from digital_operation_twin.core.utils import df_to_records, pdic, write_df, summarize_nulls, get_runtime_env
+from digital_operation_twin.config.config_loader import ConfigLoader
+from digital_operation_twin.pipelines.orchestrators.process_runner import ProcessRunner
 
 # -----------------------------
 # CONFIG
 # -----------------------------
 CSV_PATH = REPO_ROOT / "data" / "inputs" / "credit_card_process_activities.csv"
 OUT_DIR = REPO_ROOT / "data" / "outputs" / "local_step_test"
-CUSTOMER_ID = "customer_a"
-
 OUT_DIR.mkdir(parents=True, exist_ok=True)
+CUSTOMER_ID = "customer_a"
+config_dir = REPO_ROOT / "config"
+env = get_runtime_env()
+
+cfg = ConfigLoader(config_dir=config_dir, env=env, customer_id=CUSTOMER_ID)
+cfg.settings().model_dump()
+
+pdic(cfg.get("data_config.standardiser.rename"))
+pdic(cfg.keys_tree())          # keys-only tree
+pdic(cfg.keys_flat()[:50])     # first 50 paths
+settings = cfg.settings()       # validated Settings
+settings.data_config
+data_cfg = settings.data_config
+data_cfg.model_dump()
 
 # -----------------------------
 # LOAD INPUT -> records
@@ -49,110 +54,102 @@ df = pd.read_csv(CSV_PATH)
 records = df.where(pd.notna(df), None).to_dict(orient="records")
 print(f"Loaded {len(records)} records from {CSV_PATH}")
 
-# -----------------------------
-# LOAD SETTINGS
-# -----------------------------
-config_dir = REPO_ROOT / "config"
-env = get_runtime_env()
-settings = load_config_store(config_dir=str(config_dir), env=env)
+logging.basicConfig(level=logging.DEBUG)
 
-cust_settings = settings.settings_for(CUSTOMER_ID)          # Settings model
-merged = cust_settings.model_dump()                         # plain dict for easy access
-data_cfg = merged.get("data_config", {}) or {}
-data_cfg
+state = PipelineState(
+    event_id=1,
+    records=records,
+    cfg=data_cfg,
+    df = df
+)
 
-normaliser_cfg = data_cfg.get("normaliser", {}) or {}
-standardiser_cfg = data_cfg.get("standardiser") or data_cfg.get("standardizer") or {}
-data_quality_cfg = data_cfg.get("data_quality", {}) or {}
-standardiser_cfg
+schema_step = ProcessRunner(
+    segment_name='schema_validation_gate',
+    cfg={"schema_validation_gate": data_cfg.schema.schema_validation_gate.model_dump()},
+    registry=SCHEMA_VALIDATION_REGISTRY,
+    default_order=("schema_validation_gate",),
+    adapter=TRANSFORM_ADAPTER
+)
 
-# -----------------------------
-# BUILD STATE (robust: don't assume PipelineState accepts records=)
-# -----------------------------
-state = PipelineState(df=None, records=records, event_id = 1, customer_id=CUSTOMER_ID)
-state.schema_version = "v1"
-state.reports = []
+results1 = schema_step.run(state = state, inputs = {"df":state.df})
 
-# -----------------------------
-# BUILD STEPS
-# -----------------------------
-SELECTED_STEPS = [
-    "to_dataframe",
-    "normaliser",
-    "standardiser",
-    # "data_quality",
-    # "final_schema_validation",
-]
-
-STEP_REGISTRY = {
-    "to_dataframe": {
-        "build": lambda: ToDataFrameStep(),
-        "cfg":   lambda: None,
-    },
-    "normaliser": {
-        "build": lambda: NormalizerStep(normaliser_cfg),
-        "cfg":   lambda: normaliser_cfg,
-    },
-    "standardiser": {
-        "build": lambda: StandardiserStep(standardiser_cfg),
-        "cfg":   lambda: standardiser_cfg,
-    },
-    "data_quality": {
-        "build": lambda: DataQualityStep(dq_cfg),
-        "cfg":   lambda: data_quality_cfg,
-    },
-    "final_schema_validation": {
-        "build": lambda: FinalSchemaValidationStep(),
-        "cfg":   lambda: {"schema_version": getattr(state, "schema_version", None)},
-    },
-}
+report = results1.state.metrics.get("schema_report", [])
+report[:3]
 
 
-def safe_cfg_snapshot(cfg, *, max_items=100):
-    if cfg is None:
-        return None
+normalizer_step = ProcessRunner(
+    segment_name='normaliser',
+    cfg=data_cfg.normalizer.model_dump(),
+    registry=NORMALIZER_REGISTRY, 
+    default_order=NORMALIZER_ORDER,
+    adapter=TRANSFORM_ADAPTER
+)
 
-    def sanitize(value):
-        # mask common secret patterns
-        if isinstance(value, str):
-            lowered = value.lower()
-            if any(k in lowered for k in ("password", "token", "secret", "key")):
-                return "***masked***"
-            return value
+results2 = normalizer_step.run(state = state, inputs = {"df":results1.df})
+results2.status
+results2.df
 
-        if isinstance(value, (int, float, bool)) or value is None:
-            return value
 
-        if isinstance(value, list):
-            return [sanitize(v) for v in value[:max_items]]
+standardizer_step = ProcessRunner(
+    segment_name='standardizer',
+    cfg=data_cfg.standardizer.model_dump(),
+    registry=STANDARDIZER_REGISTRY, 
+    default_order=STANDARDIZER_ORDER,
+    adapter=TRANSFORM_ADAPTER
+)
 
-        if isinstance(value, dict):
-            return {k: sanitize(v) for k, v in value.items()}
+results3 = standardizer_step.run(state = state, inputs = {"df":results2.df})
+results3.df
 
-        # fallback for objects / enums / pydantic models
-        return str(value)
+valitor_step = ProcessRunner(
+    segment_name='validator',
+    cfg=data_cfg.validator.model_dump(),
+    registry=VALIDATOR_REGISTRY, 
+    default_order=VALIDATOR_ORDER,
+    adapter=TRANSFORM_ADAPTER
+)
 
-    if isinstance(cfg, dict):
-        return {
-            "type": "dict",
-            "key_count": len(cfg),
-            "config": sanitize(cfg),
-        }
+results4 = valitor_step.run(state = state, inputs = {"df":results3.df})
+results4.errors
+results4.df.columns
 
-    return {
-        "type": type(cfg).__name__,
-        "value": sanitize(cfg),
-    }
+results4.records = df_to_records(results4.df)
+
+results4.records
+
+schema_step2 = ProcessRunner(
+    segment_name='schema_validation_post_transformation',
+    cfg={"schema_validation_post_transformation": data_cfg.schema.schema_validation_post_transformation.model_dump()},
+    registry=SCHEMA_VALIDATION_REGISTRY,
+    default_order=("schema_validation_post_transformation",),
+    adapter=TRANSFORM_ADAPTER
+)
+
+results5 = schema_step2.run(state = state, inputs = {"df":results4.df})
+
+report5 = results5.state.metrics.get("schema_report", [])
+report5[:3]
+results5.df
 
 
 
-steps = [STEP_REGISTRY[name]["build"]() for name in SELECTED_STEPS]
+df
+results.state.df
+results.df
+results.errors
 
-state.selected_steps = SELECTED_STEPS
-state.selected_step_configs = {
-    name: safe_cfg_snapshot(STEP_REGISTRY[name]["cfg"]())
-    for name in SELECTED_STEPS
-}
+
+from digital_operation_twin.config.schema import Settings  # adjust import to your actual Settings module
+
+print("Settings class:", Settings, "from:", Settings.__module__)
+print("Settings fields:", list(Settings.model_fields.keys()))
+
+DC = Settings.model_fields["data_config"].annotation
+print("data_config type:", DC, "from:", getattr(DC, "__module__", None))
+
+print("data_config fields:", list(DC.model_fields.keys()))
+print("has schema_enforce?", "schema_enforce" in DC.model_fields)
+
 
 
 state.selected_step_configs
